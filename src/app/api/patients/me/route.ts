@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/patients/me — Get current user's patient record
  * Used by patient portal to get their own patientId

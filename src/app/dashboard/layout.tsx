@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import { redirect } from "next/navigation";
@@ -7,7 +8,9 @@ const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/dashboard/patients", label: "Patients", icon: "👥" },
   { href: "/dashboard/alerts", label: "Alerts", icon: "🔔" },
+  { href: "/dashboard/care-plans", label: "Care Plans", icon: "📋" },
   { href: "/dashboard/analytics", label: "Analytics", icon: "📈" },
+  { href: "/dashboard/settings", label: "Settings", icon: "⚙️" },
 ];
 
 export default async function DashboardLayout({

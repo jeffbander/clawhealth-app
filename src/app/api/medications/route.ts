@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/medications
  * GET: list medications for a patient
@@ -131,7 +132,7 @@ export async function PATCH(req: NextRequest) {
   const updated = await prisma.medication.update({ where: { id }, data: updateData });
 
   const ctx = await getAuditContext(userId, med.patient.organizationId, med.patientId);
-  await logAudit("UPDATE", "medication", id, ctx, { adherenceRate });
+  await logAudit("UPDATE", "medication", id, ctx, adherenceRate !== undefined ? { adherenceRate } : undefined);
 
   return NextResponse.json(updated);
 }

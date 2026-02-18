@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -189,6 +190,25 @@ export default async function PatientHomePage() {
       >
         💬 Chat with Your Health Coordinator
       </Link>
+
+      {/* Emergency Button */}
+      <div style={{ marginTop: "1.25rem" }}>
+        <div style={{ textAlign: "center", fontSize: "0.75rem", color: "#94a3b8", marginBottom: "0.625rem", fontWeight: 500 }}>
+          EMERGENCY
+        </div>
+        <a
+          href="tel:911"
+          className="emergency-btn"
+        >
+          🚨 Call 911 — Emergency
+        </a>
+        <div style={{ textAlign: "center", marginTop: "0.625rem", fontSize: "0.75rem", color: "#94a3b8" }}>
+          For non-emergency urgent issues, use chat or call{" "}
+          <a href="tel:+12125550100" style={{ color: "#06ABEB", textDecoration: "none", fontWeight: 600 }}>
+            (212) 555-0100
+          </a>
+        </div>
+      </div>
     </div>
   );
 }

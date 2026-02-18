@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { logAudit, getAuditContext } from "@/lib/audit";

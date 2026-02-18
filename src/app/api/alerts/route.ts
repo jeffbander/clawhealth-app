@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/alerts
  * GET: unresolved alerts for the physician's org patients

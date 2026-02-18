@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/alerts/[id]
  * PATCH: resolve an alert

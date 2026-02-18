@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/patients/[id]
  * GET: single patient with all relations

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/patients
  * GET: list patients for current org

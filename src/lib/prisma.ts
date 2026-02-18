@@ -1,7 +1,7 @@
 /**
  * Prisma singleton for Next.js
  * Prevents multiple instances in development hot reloads
- * Prisma v7: pass datasourceUrl via constructor
+ * Compatible with Neon DB PostgreSQL
  */
 import { PrismaClient } from "@prisma/client";
 
@@ -12,11 +12,7 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    datasourceUrl: process.env.DATABASE_URL,
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["error", "warn"]
-        : ["error"],
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

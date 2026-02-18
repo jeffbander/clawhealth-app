@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 /**
  * /api/voice — ElevenLabs webhook endpoint
  * Called when a patient speaks to the AI voice agent.
