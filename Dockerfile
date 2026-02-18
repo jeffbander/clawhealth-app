@@ -1,29 +1,37 @@
-# ClawHealth — Docker image for GCP Cloud Run
-# Multi-stage build: builder → slim production runner
+FROM node:20-alpine AS base
 
-FROM node:20-alpine AS builder
+# Install dependencies only when needed
+FROM base AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
-
-# Install dependencies first (better layer caching)
-COPY package*.json ./
+COPY package.json package-lock.json* ./
 RUN npm ci
 
-# Copy source and build
+# Build the app
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build Next.js
 RUN npm run build
 
-# ─── Production runner ────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+# Production runner
+FROM base AS runner
 WORKDIR /app
-
 ENV NODE_ENV=production
 
-# Copy Next.js standalone output
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Cloud Run uses port 8080
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
 EXPOSE 8080
 ENV PORT=8080
 ENV HOSTNAME="0.0.0.0"

@@ -1,0 +1,66 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: clawhealth-agents
+  namespace: "sacred-evening-485804-u0"
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/launch-stage: GA
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"    # No cold starts for voice calls
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/cpu-throttling: "false" # Always-on CPU for agents
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: clawhealth-sa@sacred-evening-485804-u0.iam.gserviceaccount.com
+      containers:
+        - image: us-east1-docker.pkg.dev/sacred-evening-485804-u0/clawhealth/app:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: DATABASE_URL
+            - name: DIRECT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: DIRECT_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: ENCRYPTION_KEY
+            - name: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: CLERK_PUBLISHABLE_KEY
+            - name: CLERK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: CLERK_SECRET_KEY
+            - name: ELEVENLABS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clawhealth-secrets
+                  key: ELEVENLABS_API_KEY
