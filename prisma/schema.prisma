@@ -1,0 +1,216 @@
+// ClawHealth - HIPAA-compliant patient AI coordinator platform
+// All PHI fields are AES-256-GCM encrypted before storage
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ConversationRole {
+  PATIENT
+  AI
+  PHYSICIAN
+}
+
+enum VitalType {
+  BLOOD_PRESSURE_SYSTOLIC
+  BLOOD_PRESSURE_DIASTOLIC
+  HEART_RATE
+  WEIGHT
+  GLUCOSE
+  OXYGEN_SATURATION
+  TEMPERATURE
+}
+
+// Patient — PHI fields encrypted AES-256-GCM
+model Patient {
+  id              String    @id @default(cuid())
+  clerkUserId     String    @unique
+  organizationId  String    // Clerk org (practice)
+
+  // PHI — all encrypted at rest
+  encMrn          String    // Medical Record Number
+  encFirstName    String
+  encLastName     String
+  encDateOfBirth  String
+  encSsn          String?
+  encAddress      String?
+  encPhone        String?
+  encEmail        String?
+
+  // Clinical (non-PHI summary only — details in encrypted fields)
+  riskLevel       String    @default("MEDIUM") // LOW / MEDIUM / HIGH / CRITICAL
+  primaryDx       String?   // ICD-10 code only, no description
+  encConditions   String    // JSON array of conditions, encrypted
+
+  // AI agent state
+  agentEnabled    Boolean   @default(true)
+  lastInteraction DateTime?
+
+  // Relations
+  physician       Physician  @relation(fields: [physicianId], references: [id])
+  physicianId     String
+  conversations   Conversation[]
+  medications     Medication[]
+  vitals          Vital[]
+  alerts          Alert[]
+  carePlans       CarePlan[]
+  auditLogs       AuditLog[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  createdBy       String    // Clerk user ID
+
+  @@index([organizationId])
+  @@index([physicianId])
+  @@index([clerkUserId])
+}
+
+model Physician {
+  id              String    @id @default(cuid())
+  clerkUserId     String    @unique
+  organizationId  String
+
+  npi             String?   @unique
+  specialty       String?
+  encName         String    // Encrypted
+
+  patients        Patient[]
+  carePlans       CarePlan[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([organizationId])
+}
+
+// Conversation — transcript encrypted, PHI never in plaintext
+model Conversation {
+  id               String           @id @default(cuid())
+  patientId        String
+  patient          Patient          @relation(fields: [patientId], references: [id])
+
+  role             ConversationRole
+  encContent       String           // Encrypted transcript
+  audioUrl         String?          // ElevenLabs recording URL
+  tokensUsed       Int?
+  modelVersion     String?
+
+  createdAt        DateTime         @default(now())
+
+  @@index([patientId])
+  @@index([createdAt])
+}
+
+model Medication {
+  id              String    @id @default(cuid())
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id])
+
+  drugName        String    // Generic name only (not PHI)
+  dose            String
+  frequency       String
+  route           String    @default("oral")
+  prescribedBy    String    // Physician ID
+  startDate       DateTime
+  endDate         DateTime?
+
+  // Adherence tracking
+  adherenceRate   Float     @default(0) // 0-100
+  lastTaken       DateTime?
+  encNotes        String?   // Encrypted patient notes
+
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([patientId])
+}
+
+model Vital {
+  id              String    @id @default(cuid())
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id])
+
+  type            VitalType
+  encValue        String    // Encrypted numeric value + unit
+  unit            String
+  recordedAt      DateTime
+  source          String    // "patient_app" | "device" | "ehr" | "physician"
+
+  createdAt       DateTime  @default(now())
+
+  @@index([patientId])
+  @@index([type])
+  @@index([recordedAt])
+}
+
+model Alert {
+  id              String        @id @default(cuid())
+  patientId       String
+  patient         Patient       @relation(fields: [patientId], references: [id])
+
+  severity        AlertSeverity
+  category        String        // "vital" | "medication" | "symptom" | "emergency"
+  encMessage      String        // Encrypted alert detail
+  triggerSource   String        // "ai_agent" | "device" | "patient_report"
+
+  resolved        Boolean       @default(false)
+  resolvedBy      String?       // Physician Clerk ID
+  resolvedAt      DateTime?
+  encResolution   String?       // Encrypted resolution notes
+
+  createdAt       DateTime      @default(now())
+
+  @@index([patientId])
+  @@index([severity])
+  @@index([resolved])
+}
+
+// AuditLog — HIPAA required, 6-year retention, no PHI in log entries
+model AuditLog {
+  id              String    @id @default(cuid())
+  userId          String    // Clerk user ID
+  action          String    // CREATE | READ | UPDATE | DELETE | LOGIN | EXPORT
+  resource        String    // Table name
+  resourceId      String    // Record ID
+  details         Json?     // Non-PHI metadata only
+  ipAddress       String?
+  userAgent       String?
+  organizationId  String?
+  patientId       String?
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+  timestamp       DateTime  @default(now())
+
+  @@index([userId])
+  @@index([timestamp])
+  @@index([resource, resourceId])
+  @@index([patientId])
+}
+
+model CarePlan {
+  id              String    @id @default(cuid())
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  physicianId     String
+  physician       Physician @relation(fields: [physicianId], references: [id])
+
+  encContent      String    // Full care plan encrypted
+  version         Int       @default(1)
+  active          Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([patientId])
+}

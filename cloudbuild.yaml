@@ -1,0 +1,33 @@
+steps:
+  # Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/sacred-evening-485804-u0/clawhealth-agents:$COMMIT_SHA'
+      - '.'
+
+  # Push to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/sacred-evening-485804-u0/clawhealth-agents:$COMMIT_SHA'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - clawhealth-agents
+      - --image=gcr.io/sacred-evening-485804-u0/clawhealth-agents:$COMMIT_SHA
+      - --region=us-east1
+      - --platform=managed
+      - --allow-unauthenticated
+      - --memory=1Gi
+      - --min-instances=1
+      - --set-env-vars=NODE_ENV=production
+      - --port=8080
+
+images:
+  - 'gcr.io/sacred-evening-485804-u0/clawhealth-agents:$COMMIT_SHA'

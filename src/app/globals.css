@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --primary: #212070;
+  --accent: #06ABEB;
+  --cta: #DC298D;
+  --primary-dark: #1a1a5c;
+  --accent-light: #e8f7fd;
+  --background: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --critical: #dc2626;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Risk level badge colors */
+.badge-critical { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-high     { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+.badge-medium   { background: #fefce8; color: #ca8a04; border: 1px solid #fde68a; }
+.badge-low      { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+
+/* Adherence bar */
+.adherence-bar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+  height: 8px;
+  width: 100%;
+}
+.adherence-bar-fill {
+  height: 8px;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
