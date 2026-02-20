@@ -17,7 +17,17 @@ const isProtectedApiRoute = createRouteMatcher([
   '/api/voice(.*)',
 ])
 
+// Twilio webhooks use signature validation, not Clerk auth
+const isTwilioRoute = createRouteMatcher(['/api/twilio(.*)'])
+// Test setup routes (dev only)
+const isTestRoute = createRouteMatcher(['/api/test(.*)'])
+
 export default clerkMiddleware(async (auth, req) => {
+  // Skip Clerk auth for Twilio webhooks (they use signature validation)
+  if (isTwilioRoute(req)) return NextResponse.next()
+  // Skip Clerk auth for test setup routes in development
+  if (isTestRoute(req) && process.env.NODE_ENV !== 'production') return NextResponse.next()
+
   const { userId } = await auth()
   
   if (isProtectedRoute(req) && !userId) {

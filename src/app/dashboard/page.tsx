@@ -6,17 +6,23 @@ import { decryptPHI } from "@/lib/encryption";
 import Link from "next/link";
 
 const SEVERITY_ORDER = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-const SEVERITY_COLORS: Record<string, string> = {
-  CRITICAL: "#dc2626",
-  HIGH: "#ea580c",
-  MEDIUM: "#ca8a04",
-  LOW: "#16a34a",
+const SEVERITY_STYLES: Record<string, string> = {
+  CRITICAL: "bg-red-100 text-red-700 border-red-200",
+  HIGH: "bg-orange-100 text-orange-700 border-orange-200",
+  MEDIUM: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  LOW: "bg-green-100 text-green-700 border-green-200",
 };
-const RISK_BADGE: Record<string, string> = {
-  CRITICAL: "badge-critical",
-  HIGH: "badge-high",
-  MEDIUM: "badge-medium",
-  LOW: "badge-low",
+const SEVERITY_DOT: Record<string, string> = {
+  CRITICAL: "bg-red-500",
+  HIGH: "bg-orange-500",
+  MEDIUM: "bg-yellow-500",
+  LOW: "bg-green-500",
+};
+const RISK_STYLES: Record<string, string> = {
+  CRITICAL: "bg-red-50 text-red-700 border border-red-200",
+  HIGH: "bg-orange-50 text-orange-700 border border-orange-200",
+  MEDIUM: "bg-yellow-50 text-yellow-700 border border-yellow-200",
+  LOW: "bg-green-50 text-green-700 border border-green-200",
 };
 
 function timeAgo(date: Date): string {
@@ -27,13 +33,18 @@ function timeAgo(date: Date): string {
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
+const STAT_COLORS = [
+  "text-[var(--primary)]",
+  "text-red-600",
+  "text-orange-600",
+  "text-[var(--accent)]",
+];
+
 export default async function DashboardPage() {
   const { userId, orgId } = await auth();
   if (!userId) return null;
 
   const ctx = await getAuditContext(userId, orgId ?? undefined);
-
-  // Fetch all stats in parallel
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
@@ -67,10 +78,7 @@ export default async function DashboardPage() {
       },
     }),
     prisma.alert.findMany({
-      where: {
-        resolved: false,
-        patient: { organizationId: orgId ?? "" },
-      },
+      where: { resolved: false, patient: { organizationId: orgId ?? "" } },
       include: { patient: true },
       orderBy: { createdAt: "desc" },
       take: 10,
@@ -82,157 +90,84 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  // Sort alerts by severity
   const sortedAlerts = [...recentAlerts].sort(
     (a, b) =>
       (SEVERITY_ORDER[a.severity as keyof typeof SEVERITY_ORDER] ?? 3) -
       (SEVERITY_ORDER[b.severity as keyof typeof SEVERITY_ORDER] ?? 3)
   );
 
-  // Log audit — no PHI in details
   await logAudit("READ", "dashboard", "overview", ctx, {
     patientsCount: totalPatients,
     alertsCount: criticalHighAlerts,
   });
 
   const stats = [
-    { label: "Total Patients", value: totalPatients, color: "#212070", icon: "👥" },
-    { label: "Active Alerts (Critical+High)", value: criticalHighAlerts, color: "#dc2626", icon: "🔔" },
-    { label: "Low Medication Adherence", value: lowAdherencePatients, color: "#ea580c", icon: "💊" },
-    { label: "Interactions Today", value: todayInteractions, color: "#06ABEB", icon: "💬" },
+    { label: "Total Patients", value: totalPatients, icon: "👥" },
+    { label: "Active Alerts", value: criticalHighAlerts, icon: "🔔" },
+    { label: "Low Adherence", value: lowAdherencePatients, icon: "💊" },
+    { label: "Today's Interactions", value: todayInteractions, icon: "💬" },
   ];
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#212070", margin: 0 }}>
+    <div className="max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-[var(--primary)]">
           Physician Dashboard
         </h1>
-        <p style={{ color: "#64748b", marginTop: "0.25rem", fontSize: "0.875rem" }}>
+        <p className="text-sm text-[var(--text-muted)] mt-1">
           Mount Sinai West — Cardiology Program
         </p>
       </div>
 
-      {/* Stats cards */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "1rem",
-          marginBottom: "1.5rem",
-        }}
-      >
-        {stats.map((s) => (
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {stats.map((s, i) => (
           <div
             key={s.label}
-            style={{
-              background: "white",
-              borderRadius: "0.75rem",
-              padding: "1.25rem",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-            }}
+            className="bg-[var(--surface)] rounded-xl p-5 border border-[var(--border)] shadow-sm hover:shadow-md transition-all duration-200 group"
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <span style={{ fontSize: "1.25rem" }}>{s.icon}</span>
-              <span style={{ fontSize: "0.8125rem", color: "#64748b", fontWeight: 500 }}>{s.label}</span>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xl group-hover:scale-110 transition-transform duration-200">{s.icon}</span>
+              <span className="text-[0.8125rem] text-[var(--text-muted)] font-medium">{s.label}</span>
             </div>
-            <div style={{ fontSize: "2rem", fontWeight: 700, color: s.color }}>{s.value}</div>
+            <div className={`text-3xl font-bold ${STAT_COLORS[i]}`}>{s.value}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
-        {/* Recent Alerts */}
-        <section
-          style={{
-            background: "white",
-            borderRadius: "0.75rem",
-            border: "1px solid #e2e8f0",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "1rem 1.25rem",
-              borderBottom: "1px solid #e2e8f0",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "#1e293b" }}>
-              🔔 Active Alerts
-            </h2>
-            <Link
-              href="/dashboard/alerts"
-              style={{ fontSize: "0.8125rem", color: "#06ABEB", textDecoration: "none", fontWeight: 500 }}
-            >
+      {/* Alerts + Roster */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Active Alerts */}
+        <section className="bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">🔔 Active Alerts</h2>
+            <Link href="/dashboard/alerts" className="text-[0.8125rem] text-[var(--accent)] font-medium hover:underline">
               View all →
             </Link>
           </div>
-          <div>
+          <div className="divide-y divide-[var(--border-light)]">
             {sortedAlerts.length === 0 ? (
-              <div style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
-                ✅ No active alerts
-              </div>
+              <div className="p-8 text-center text-[var(--text-muted)]">✅ No active alerts</div>
             ) : (
               sortedAlerts.map((alert) => {
-                // Decrypt first name only for display — no PHI in logs
                 let firstName = "Patient";
-                try {
-                  firstName = decryptPHI(alert.patient.encFirstName);
-                } catch {}
-
+                try { firstName = decryptPHI(alert.patient.encFirstName); } catch {}
                 return (
-                  <div
-                    key={alert.id}
-                    style={{
-                      padding: "0.875rem 1.25rem",
-                      borderBottom: "1px solid #f1f5f9",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: "10px",
-                        height: "10px",
-                        borderRadius: "50%",
-                        background: SEVERITY_COLORS[alert.severity] ?? "#64748b",
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1e293b" }}>
+                  <div key={alert.id} className="px-5 py-3.5 flex items-center gap-3 hover:bg-[var(--background)] transition-colors duration-150">
+                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${SEVERITY_DOT[alert.severity] ?? "bg-gray-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-[var(--text-primary)]">
                         {firstName}
-                        <span
-                          style={{
-                            marginLeft: "0.5rem",
-                            fontSize: "0.75rem",
-                            fontWeight: 600,
-                            color: SEVERITY_COLORS[alert.severity],
-                          }}
-                        >
-                          [{alert.severity}]
+                        <span className={`ml-2 text-xs font-semibold px-1.5 py-0.5 rounded-full ${SEVERITY_STYLES[alert.severity] ?? ""}`}>
+                          {alert.severity}
                         </span>
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.125rem" }}>
+                      <div className="text-xs text-[var(--text-muted)] mt-0.5">
                         {alert.category} · {timeAgo(alert.createdAt)}
                       </div>
                     </div>
-                    <Link
-                      href={`/dashboard/patients/${alert.patientId}`}
-                      style={{
-                        fontSize: "0.75rem",
-                        color: "#06ABEB",
-                        textDecoration: "none",
-                        fontWeight: 500,
-                      }}
-                    >
+                    <Link href={`/dashboard/patients/${alert.patientId}`} className="text-xs text-[var(--accent)] font-medium hover:underline">
                       View
                     </Link>
                   </div>
@@ -243,99 +178,36 @@ export default async function DashboardPage() {
         </section>
 
         {/* Patient Roster */}
-        <section
-          style={{
-            background: "white",
-            borderRadius: "0.75rem",
-            border: "1px solid #e2e8f0",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "1rem 1.25rem",
-              borderBottom: "1px solid #e2e8f0",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "#1e293b" }}>
-              👥 Patient Roster
-            </h2>
-            <Link
-              href="/dashboard/patients"
-              style={{ fontSize: "0.8125rem", color: "#06ABEB", textDecoration: "none", fontWeight: 500 }}
-            >
+        <section className="bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--border)] flex justify-between items-center">
+            <h2 className="text-base font-semibold text-[var(--text-primary)]">👥 Patient Roster</h2>
+            <Link href="/dashboard/patients" className="text-[0.8125rem] text-[var(--accent)] font-medium hover:underline">
               View all →
             </Link>
           </div>
-          <div>
+          <div className="divide-y divide-[var(--border-light)]">
             {patients.length === 0 ? (
-              <div style={{ padding: "2rem", textAlign: "center", color: "#64748b" }}>
-                No patients yet
-              </div>
+              <div className="p-8 text-center text-[var(--text-muted)]">No patients yet</div>
             ) : (
               patients.map((p) => {
                 let firstName = "Patient";
-                try {
-                  firstName = decryptPHI(p.encFirstName);
-                } catch {}
-
-                const riskClass = RISK_BADGE[p.riskLevel] ?? "badge-medium";
-
+                try { firstName = decryptPHI(p.encFirstName); } catch {}
                 return (
                   <Link
                     key={p.id}
                     href={`/dashboard/patients/${p.id}`}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      padding: "0.875rem 1.25rem",
-                      borderBottom: "1px solid #f1f5f9",
-                      textDecoration: "none",
-                      color: "inherit",
-                    }}
+                    className="flex items-center gap-3 px-5 py-3.5 hover:bg-[var(--background)] transition-colors duration-150 no-underline text-inherit"
                   >
-                    <div
-                      style={{
-                        width: "36px",
-                        height: "36px",
-                        borderRadius: "50%",
-                        background: "#e8f7fd",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: 700,
-                        color: "#212070",
-                        fontSize: "0.875rem",
-                        flexShrink: 0,
-                      }}
-                    >
+                    <div className="w-9 h-9 rounded-full bg-[var(--accent-light)] flex items-center justify-center font-bold text-[var(--primary)] text-sm flex-shrink-0">
                       {firstName.charAt(0).toUpperCase()}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1e293b" }}>
-                        {firstName}
-                      </div>
-                      <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                        {p.primaryDx ?? "No DX on file"} ·{" "}
-                        {p.lastInteraction
-                          ? `Last: ${timeAgo(p.lastInteraction)}`
-                          : "No interactions"}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-[var(--text-primary)]">{firstName}</div>
+                      <div className="text-xs text-[var(--text-muted)]">
+                        {p.primaryDx ?? "No DX"} · {p.lastInteraction ? `Last: ${timeAgo(p.lastInteraction)}` : "No interactions"}
                       </div>
                     </div>
-                    <span
-                      className={riskClass}
-                      style={{
-                        fontSize: "0.6875rem",
-                        fontWeight: 600,
-                        padding: "0.2rem 0.5rem",
-                        borderRadius: "9999px",
-                      }}
-                    >
+                    <span className={`text-[0.6875rem] font-semibold px-2 py-0.5 rounded-full ${RISK_STYLES[p.riskLevel] ?? ""}`}>
                       {p.riskLevel}
                     </span>
                   </Link>

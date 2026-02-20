@@ -5,11 +5,17 @@ import { logAudit, getAuditContext } from "@/lib/audit";
 import { decryptPHI } from "@/lib/encryption";
 import Link from "next/link";
 
-const RISK_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  CRITICAL: { bg: "#fef2f2", text: "#dc2626", border: "#fecaca" },
-  HIGH: { bg: "#fff7ed", text: "#ea580c", border: "#fed7aa" },
-  MEDIUM: { bg: "#fefce8", text: "#ca8a04", border: "#fde68a" },
-  LOW: { bg: "#f0fdf4", text: "#16a34a", border: "#bbf7d0" },
+const RISK_STYLES: Record<string, string> = {
+  CRITICAL: "bg-red-50 text-red-700 border-red-200",
+  HIGH: "bg-orange-50 text-orange-700 border-orange-200",
+  MEDIUM: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  LOW: "bg-green-50 text-green-700 border-green-200",
+};
+const RISK_STAT: Record<string, string> = {
+  CRITICAL: "bg-red-50 border-red-200 text-red-700",
+  HIGH: "bg-orange-50 border-orange-200 text-orange-700",
+  MEDIUM: "bg-yellow-50 border-yellow-200 text-yellow-700",
+  LOW: "bg-green-50 border-green-200 text-green-700",
 };
 
 function timeAgo(date: Date | null): string {
@@ -50,191 +56,105 @@ export default async function PatientsPage() {
     return { ...p, firstName, lastName };
   });
 
-  // Sort by risk priority
   const riskOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
   decrypted.sort((a, b) => riskOrder.indexOf(a.riskLevel) - riskOrder.indexOf(b.riskLevel));
 
   return (
-    <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+    <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#212070", margin: 0 }}>
-            Patient Roster
-          </h1>
-          <p style={{ color: "#64748b", marginTop: "0.25rem", fontSize: "0.875rem" }}>
-            {decrypted.length} patients enrolled
-          </p>
+          <h1 className="text-2xl font-bold text-[var(--primary)]">Patient Roster</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-1">{decrypted.length} patients enrolled</p>
         </div>
         <Link
           href="/dashboard/patients/add"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            background: "linear-gradient(135deg, #212070, #06ABEB)",
-            color: "white",
-            padding: "0.625rem 1.25rem",
-            borderRadius: "0.75rem",
-            textDecoration: "none",
-            fontWeight: 600,
-            fontSize: "0.875rem",
-          }}
+          className="inline-flex items-center gap-2 bg-gradient-to-r from-[var(--primary)] to-[var(--accent)] text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity duration-200 no-underline"
         >
           + Add Patient
         </Link>
       </div>
 
-      {/* Summary bar */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.75rem", marginBottom: "1.5rem" }}>
-        {["CRITICAL", "HIGH", "MEDIUM", "LOW"].map((level) => {
+      {/* Risk summary */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        {riskOrder.map((level) => {
           const count = decrypted.filter((p) => p.riskLevel === level).length;
-          const colors = RISK_COLORS[level] ?? RISK_COLORS.LOW;
           return (
-            <div
-              key={level}
-              style={{
-                background: colors.bg,
-                border: `1px solid ${colors.border}`,
-                borderRadius: "0.75rem",
-                padding: "0.875rem 1rem",
-                textAlign: "center",
-              }}
-            >
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, color: colors.text }}>{count}</div>
-              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: colors.text }}>{level}</div>
+            <div key={level} className={`rounded-xl p-3.5 text-center border ${RISK_STAT[level]}`}>
+              <div className="text-2xl font-bold">{count}</div>
+              <div className="text-xs font-semibold">{level}</div>
             </div>
           );
         })}
       </div>
 
       {/* Patient table */}
-      <div style={{ background: "white", borderRadius: "0.75rem", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-        {/* Table header */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 150px 100px 100px 80px", gap: "1rem", padding: "0.75rem 1.25rem", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-          {["Patient", "Risk Level", "Primary DX", "Alerts", "Last Visit", ""].map((h) => (
-            <div key={h} style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              {h}
-            </div>
+      <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
+        {/* Header row */}
+        <div className="hidden lg:grid grid-cols-[1fr_100px_140px_80px_90px_70px] gap-4 px-5 py-3 bg-[var(--background)] border-b border-[var(--border)]">
+          {["Patient", "Risk", "Primary DX", "Alerts", "Last Visit", ""].map((h) => (
+            <div key={h} className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</div>
           ))}
         </div>
 
         {decrypted.length === 0 ? (
-          <div style={{ padding: "3rem", textAlign: "center", color: "#64748b" }}>
-            <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>👥</div>
-            <div style={{ fontWeight: 600, marginBottom: "0.25rem" }}>No patients yet</div>
-            <Link href="/dashboard/patients/add" style={{ color: "#06ABEB", textDecoration: "none", fontWeight: 500 }}>
+          <div className="p-12 text-center text-[var(--text-muted)]">
+            <div className="text-4xl mb-2">👥</div>
+            <div className="font-semibold mb-1">No patients yet</div>
+            <Link href="/dashboard/patients/add" className="text-[var(--accent)] font-medium hover:underline">
               Add your first patient →
             </Link>
           </div>
         ) : (
-          decrypted.map((p) => {
-            const colors = RISK_COLORS[p.riskLevel] ?? RISK_COLORS.MEDIUM;
-            return (
+          <div className="divide-y divide-[var(--border-light)]">
+            {decrypted.map((p) => (
               <div
                 key={p.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 120px 150px 100px 100px 80px",
-                  gap: "1rem",
-                  padding: "1rem 1.25rem",
-                  borderBottom: "1px solid #f1f5f9",
-                  alignItems: "center",
-                }}
+                className="grid grid-cols-[1fr_100px_140px_80px_90px_70px] gap-4 px-5 py-3.5 items-center hover:bg-[var(--background)] transition-colors duration-150"
               >
                 {/* Name */}
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <div style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "50%",
-                    background: "linear-gradient(135deg, #212070, #06ABEB)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "white",
-                    fontWeight: 700,
-                    fontSize: "0.875rem",
-                    flexShrink: 0,
-                  }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                     {p.firstName.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1e293b" }}>
-                      {p.firstName} {p.lastName}
-                    </div>
-                    <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                      {p._count.medications} meds active
-                    </div>
+                    <div className="font-semibold text-sm text-[var(--text-primary)]">{p.firstName} {p.lastName}</div>
+                    <div className="text-xs text-[var(--text-muted)]">{p._count.medications} meds active</div>
                   </div>
                 </div>
 
                 {/* Risk */}
-                <span style={{
-                  display: "inline-block",
-                  background: colors.bg,
-                  color: colors.text,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: "9999px",
-                  padding: "0.2rem 0.625rem",
-                  fontSize: "0.6875rem",
-                  fontWeight: 700,
-                }}>
+                <span className={`inline-block text-[0.6875rem] font-bold px-2.5 py-0.5 rounded-full border ${RISK_STYLES[p.riskLevel] ?? ""}`}>
                   {p.riskLevel}
                 </span>
 
                 {/* DX */}
-                <div style={{ fontSize: "0.8125rem", color: "#475569" }}>
-                  {p.primaryDx ?? "—"}
-                </div>
+                <div className="text-[0.8125rem] text-[var(--text-secondary)]">{p.primaryDx ?? "—"}</div>
 
                 {/* Alerts */}
                 <div>
                   {p._count.alerts > 0 ? (
-                    <span style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                      background: "#fef2f2",
-                      color: "#dc2626",
-                      border: "1px solid #fecaca",
-                      borderRadius: "9999px",
-                      padding: "0.15rem 0.5rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                    }}>
+                    <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 text-xs font-semibold">
                       🔔 {p._count.alerts}
                     </span>
                   ) : (
-                    <span style={{ color: "#10b981", fontSize: "0.8125rem" }}>✅ Clear</span>
+                    <span className="text-green-600 text-[0.8125rem]">✅</span>
                   )}
                 </div>
 
                 {/* Last Visit */}
-                <div style={{ fontSize: "0.8125rem", color: "#64748b" }}>
-                  {timeAgo(p.lastInteraction)}
-                </div>
+                <div className="text-[0.8125rem] text-[var(--text-muted)]">{timeAgo(p.lastInteraction)}</div>
 
                 {/* Action */}
                 <Link
                   href={`/dashboard/patients/${p.id}`}
-                  style={{
-                    display: "inline-block",
-                    background: "#212070",
-                    color: "white",
-                    padding: "0.375rem 0.75rem",
-                    borderRadius: "0.5rem",
-                    textDecoration: "none",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    textAlign: "center",
-                  }}
+                  className="inline-block bg-[var(--primary)] text-white px-3 py-1.5 rounded-lg text-xs font-semibold text-center hover:opacity-90 transition-opacity duration-200 no-underline"
                 >
                   View
                 </Link>
               </div>
-            );
-          })
+            ))}
+          </div>
         )}
       </div>
     </div>
