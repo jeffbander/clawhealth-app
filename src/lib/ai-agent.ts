@@ -5,7 +5,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import { PrismaClient } from '@prisma/client'
-import { decryptPHI, decryptJSON } from './encryption'
+import { decryptPHI, decryptJSON, encryptPHI } from './encryption'
 
 const prisma = new PrismaClient()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -120,6 +120,108 @@ Critical rules:
 }
 
 /**
+ * Load recent conversation history from DB for context continuity
+ * Returns last N messages as alternating user/assistant pairs
+ */
+async function loadConversationHistory(
+  patientId: string,
+  limit: number = 10
+): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  const convos = await prisma.conversation.findMany({
+    where: { patientId },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: { role: true, encContent: true }
+  })
+
+  // Reverse to chronological order, map roles, decrypt
+  return convos.reverse().map(c => ({
+    role: c.role === 'PATIENT' ? 'user' as const : 'assistant' as const,
+    content: decryptPHI(c.encContent)
+  })).filter(c => c.content.length > 0)
+}
+
+/**
+ * Extract clinical insights from a conversation turn
+ * Runs async after response — does not block the patient reply
+ */
+async function extractAndStoreInsights(
+  patientId: string,
+  userMessage: string,
+  aiResponse: string,
+  ctx: PatientContext
+): Promise<void> {
+  try {
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 256,
+      system: `You are a clinical data extractor. From the patient message and AI response, extract any clinically relevant insights. Return a JSON object with:
+- "insights": array of short factual statements (e.g. "Patient reports ankle swelling since Tuesday", "Patient confirmed taking Lisinopril daily")  
+- "adherenceUpdate": { "drug": string, "taken": boolean } or null if no medication adherence info
+- "vitalMention": { "type": string, "value": string } or null if no vital signs mentioned
+- "moodOrConcern": string or null (e.g. "anxious about upcoming procedure", "feeling better")
+
+If nothing clinically relevant, return {"insights":[],"adherenceUpdate":null,"vitalMention":null,"moodOrConcern":null}
+Return ONLY valid JSON.`,
+      messages: [{
+        role: 'user',
+        content: `Patient (${ctx.firstName}, conditions: ${ctx.conditions.join(', ')}):
+"${userMessage}"
+
+AI response:
+"${aiResponse}"`
+      }]
+    })
+
+    const text = completion.content[0].type === 'text' ? completion.content[0].text : '{}'
+    const jsonStr = text.replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim()
+    const extracted = JSON.parse(jsonStr)
+
+    // Store insights as a system conversation entry
+    if (extracted.insights?.length > 0) {
+      await prisma.conversation.create({
+        data: {
+          patientId,
+          role: 'AI',
+          encContent: encryptPHI(JSON.stringify({
+            type: 'insight_extraction',
+            timestamp: new Date().toISOString(),
+            insights: extracted.insights,
+            adherenceUpdate: extracted.adherenceUpdate,
+            vitalMention: extracted.vitalMention,
+            moodOrConcern: extracted.moodOrConcern
+          })),
+          audioUrl: 'system://insight-extraction'
+        }
+      })
+    }
+
+    // Update medication adherence if mentioned
+    if (extracted.adherenceUpdate?.drug) {
+      const med = await prisma.medication.findFirst({
+        where: {
+          patientId,
+          drugName: { contains: extracted.adherenceUpdate.drug, mode: 'insensitive' as const },
+          active: true
+        }
+      })
+      if (med && extracted.adherenceUpdate.taken) {
+        await prisma.medication.update({
+          where: { id: med.id },
+          data: {
+            lastTaken: new Date(),
+            // Simple rolling average: move adherence toward 100 if taken
+            adherenceRate: Math.min(100, med.adherenceRate + (100 - med.adherenceRate) * 0.1)
+          }
+        })
+      }
+    }
+  } catch {
+    // Insight extraction is best-effort — never block patient responses
+  }
+}
+
+/**
  * Generate AI response for a patient interaction
  * Returns the assistant message and whether escalation is needed
  *
@@ -129,10 +231,15 @@ Critical rules:
 export async function generatePatientResponse(
   patientId: string,
   userMessage: string,
-  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string }> {
   const ctx = await loadPatientContext(patientId)
   const systemPrompt = buildSystemPrompt(ctx)
+
+  // Load conversation history from DB if not provided
+  const history = conversationHistory?.length
+    ? conversationHistory
+    : await loadConversationHistory(patientId)
 
   // Proactive outreach mode — generate a friendly check-in message
   if (userMessage === '__PROACTIVE_OUTREACH__') {
@@ -160,7 +267,8 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
   const emergencyKeywords = [
     'chest pain', 'chest pressure', 'cant breathe', "can't breathe", 'shortness of breath',
     'passing out', 'syncope', 'fainted', 'severe pain', 'emergency', '911',
-    'heart attack', 'stroke', 'arm pain', 'jaw pain', 'sweating', 'dizzy and chest'
+    'heart attack', 'stroke', 'arm pain', 'jaw pain', 'sweating', 'dizzy and chest',
+    'kill myself', 'suicide', 'want to die', 'end my life'
   ]
 
   const messageLC = userMessage.toLowerCase()
@@ -170,13 +278,13 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
     : undefined
 
   const messages = [
-    ...conversationHistory,
+    ...history,
     { role: 'user' as const, content: userMessage }
   ]
 
   const completion = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 512, // Keep responses concise for voice
+    max_tokens: 512,
     system: systemPrompt,
     messages
   })
@@ -184,6 +292,9 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
   const response = completion.content[0].type === 'text'
     ? completion.content[0].text
     : 'I apologize, I had trouble generating a response. Please contact your care team directly.'
+
+  // Fire-and-forget: extract insights from this interaction
+  extractAndStoreInsights(patientId, userMessage, response, ctx).catch(() => {})
 
   return { response, requiresEscalation, escalationReason }
 }

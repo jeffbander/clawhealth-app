@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
   // Store inbound message (encrypted)
   await storeConversation(patient.id, "PATIENT", body, `twilio://sms/${messageSid}`);
 
-  // Generate AI response
+  // Generate AI response — history loaded from DB automatically
   const { response, requiresEscalation, escalationReason } =
-    await generatePatientResponse(patient.id, body, []);
+    await generatePatientResponse(patient.id, body);
 
   // Store AI response (encrypted)
   await storeConversation(patient.id, "AI", response, `twilio://sms/${messageSid}/reply`);
