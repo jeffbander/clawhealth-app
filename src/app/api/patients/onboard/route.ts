@@ -78,7 +78,11 @@ Extract:
 - conditions: array of condition names (e.g. ["Heart Failure with reduced EF", "Atrial Fibrillation", "Type 2 Diabetes"])
 - medications: array of objects with drugName, dose, frequency, route (default "oral")
 - medicalSummary: 2-3 sentence clinical summary including relevant history, EF if available, relevant procedures
-- riskLevel: assess as LOW/MEDIUM/HIGH/CRITICAL based on condition severity, number of comorbidities, and medication complexity
+- riskLevel: assess as LOW/MEDIUM/HIGH/CRITICAL using cardiology criteria:
+  CRITICAL = EF ≤30%, NYHA III-IV, elevated BNP/NT-proBNP, recent hospitalization, or ≥3 major comorbidities
+  HIGH = EF 31-40%, AFib on anticoagulation, CAD with stents/CABG, CKD stage 3+, or ≥2 major comorbidities  
+  MEDIUM = Controlled HTN with 2+ meds, stable valvular disease, single major condition
+  LOW = Well-controlled single condition, normal EF, low medication burden
 - primaryDx: primary ICD-10 code if identifiable (e.g. "I50.22" for HFrEF)
 
 If a field is not found in the text, use empty string or empty array. Never fabricate data not present in the source text.`,

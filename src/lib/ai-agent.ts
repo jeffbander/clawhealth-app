@@ -128,7 +128,11 @@ async function loadConversationHistory(
   limit: number = 10
 ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
   const convos = await prisma.conversation.findMany({
-    where: { patientId },
+    where: {
+      patientId,
+      // Exclude system entries (insight extractions, onboarding metadata)
+      NOT: { audioUrl: { startsWith: 'system://' } }
+    },
     orderBy: { createdAt: 'desc' },
     take: limit,
     select: { role: true, encContent: true }
@@ -266,7 +270,7 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
   // Emergency keywords that require immediate physician alert
   const emergencyKeywords = [
     'chest pain', 'chest pressure', 'cant breathe', "can't breathe", 'shortness of breath',
-    'passing out', 'syncope', 'fainted', 'severe pain', 'emergency', '911',
+    'passing out', 'passed out', 'syncope', 'fainted', 'faint', 'severe pain', 'emergency', '911',
     'heart attack', 'stroke', 'arm pain', 'jaw pain', 'sweating', 'dizzy and chest',
     'kill myself', 'suicide', 'want to die', 'end my life'
   ]
