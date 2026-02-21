@@ -3,11 +3,23 @@
 import { useEffect, useState, useCallback } from "react";
 
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-const SEVERITY_COLORS: Record<string, string> = {
-  CRITICAL: "#dc2626",
-  HIGH: "#ea580c",
-  MEDIUM: "#ca8a04",
-  LOW: "#16a34a",
+const SEVERITY_DOT: Record<string, string> = {
+  CRITICAL: "bg-red-500",
+  HIGH: "bg-orange-500",
+  MEDIUM: "bg-yellow-500",
+  LOW: "bg-green-500",
+};
+const SEVERITY_TEXT: Record<string, string> = {
+  CRITICAL: "text-red-600",
+  HIGH: "text-orange-600",
+  MEDIUM: "text-yellow-600",
+  LOW: "text-green-600",
+};
+const SEVERITY_BORDER: Record<string, string> = {
+  CRITICAL: "border-l-red-500",
+  HIGH: "border-l-orange-500",
+  MEDIUM: "border-l-yellow-500",
+  LOW: "border-l-green-500",
 };
 
 interface Alert {
@@ -40,8 +52,7 @@ export default function AlertsPage() {
       if (!res.ok) throw new Error("Failed to load alerts");
       const data = await res.json();
       const sorted = [...data].sort(
-        (a, b) =>
-          (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3)
+        (a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3)
       );
       setAlerts(sorted);
     } catch {
@@ -51,9 +62,7 @@ export default function AlertsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchAlerts();
-  }, [fetchAlerts]);
+  useEffect(() => { fetchAlerts(); }, [fetchAlerts]);
 
   const handleResolve = async (alertId: string) => {
     setResolving(alertId);
@@ -73,56 +82,29 @@ export default function AlertsPage() {
   };
 
   return (
-    <div style={{ maxWidth: "900px", margin: "0 auto" }}>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#212070", margin: 0 }}>
-          🔔 Active Alerts
-        </h1>
-        <p style={{ color: "#64748b", marginTop: "0.25rem", fontSize: "0.875rem" }}>
-          All unresolved alerts sorted by severity
-        </p>
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-[var(--primary)]">🔔 Active Alerts</h1>
+        <p className="text-sm text-[var(--text-muted)] mt-1">All unresolved alerts sorted by severity</p>
       </div>
 
-      <div
-        style={{
-          background: "white",
-          borderRadius: "0.75rem",
-          border: "1px solid #e2e8f0",
-          overflow: "hidden",
-        }}
-      >
+      <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
         {loading ? (
-          <div style={{ padding: "3rem", textAlign: "center", color: "#64748b" }}>
-            Loading alerts…
+          <div className="p-12 text-center text-[var(--text-muted)]">
+            <div className="animate-pulse">Loading alerts…</div>
           </div>
         ) : error ? (
-          <div style={{ padding: "2rem", textAlign: "center", color: "#dc2626" }}>{error}</div>
+          <div className="p-8 text-center text-red-600">{error}</div>
         ) : alerts.length === 0 ? (
-          <div style={{ padding: "3rem", textAlign: "center" }}>
-            <div style={{ fontSize: "3rem", marginBottom: "0.75rem" }}>✅</div>
-            <div style={{ fontWeight: 600, color: "#1e293b" }}>All clear!</div>
-            <div style={{ color: "#64748b", fontSize: "0.875rem", marginTop: "0.25rem" }}>
-              No active alerts for your patients.
-            </div>
+          <div className="p-12 text-center">
+            <div className="text-5xl mb-3">✅</div>
+            <div className="font-semibold text-[var(--text-primary)]">All clear!</div>
+            <div className="text-[var(--text-muted)] text-sm mt-1">No active alerts for your patients.</div>
           </div>
         ) : (
           <>
-            {/* Header row */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "120px 1fr 1fr 120px 100px",
-                gap: "1rem",
-                padding: "0.75rem 1.25rem",
-                background: "#f8fafc",
-                borderBottom: "1px solid #e2e8f0",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                color: "#64748b",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
+            {/* Header */}
+            <div className="hidden lg:grid grid-cols-[100px_1fr_1fr_100px_90px] gap-4 px-5 py-3 bg-[var(--background)] border-b border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               <span>Severity</span>
               <span>Patient</span>
               <span>Alert</span>
@@ -130,97 +112,45 @@ export default function AlertsPage() {
               <span>Action</span>
             </div>
 
-            {alerts.map((alert) => (
-              <div
-                key={alert.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "120px 1fr 1fr 120px 100px",
-                  gap: "1rem",
-                  padding: "1rem 1.25rem",
-                  borderBottom: "1px solid #f1f5f9",
-                  alignItems: "center",
-                  borderLeft: `4px solid ${SEVERITY_COLORS[alert.severity] ?? "#e2e8f0"}`,
-                }}
-              >
-                {/* Severity */}
-                <span
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "0.375rem",
-                    fontSize: "0.8125rem",
-                    fontWeight: 700,
-                    color: SEVERITY_COLORS[alert.severity],
-                  }}
+            <div className="divide-y divide-[var(--border-light)]">
+              {alerts.map((a) => (
+                <div
+                  key={a.id}
+                  className={`grid grid-cols-[100px_1fr_1fr_100px_90px] gap-4 px-5 py-3.5 items-center border-l-4 ${SEVERITY_BORDER[a.severity] ?? "border-l-gray-300"} hover:bg-[var(--background)] transition-colors duration-150`}
                 >
-                  <span
-                    style={{
-                      width: "8px",
-                      height: "8px",
-                      borderRadius: "50%",
-                      background: SEVERITY_COLORS[alert.severity],
-                      flexShrink: 0,
-                    }}
-                  />
-                  {alert.severity}
-                </span>
+                  {/* Severity */}
+                  <span className={`inline-flex items-center gap-1.5 text-[0.8125rem] font-bold ${SEVERITY_TEXT[a.severity] ?? ""}`}>
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEVERITY_DOT[a.severity] ?? "bg-gray-400"}`} />
+                    {a.severity}
+                  </span>
 
-                {/* Patient */}
-                <span style={{ fontWeight: 600, fontSize: "0.875rem", color: "#1e293b" }}>
-                  {alert.firstName}
-                </span>
+                  {/* Patient */}
+                  <span className="font-semibold text-sm text-[var(--text-primary)]">{a.firstName}</span>
 
-                {/* Message */}
-                <div>
-                  <div
-                    style={{
-                      fontSize: "0.8125rem",
-                      fontWeight: 500,
-                      color: "#475569",
-                      marginBottom: "0.125rem",
-                    }}
-                  >
-                    [{alert.category}]
+                  {/* Alert */}
+                  <div>
+                    <div className="text-[0.8125rem] font-medium text-[var(--text-secondary)] mb-0.5">[{a.category}]</div>
+                    <div className="text-[0.8125rem] text-[var(--text-muted)] truncate">{a.message}</div>
                   </div>
-                  <div
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "#64748b",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
+
+                  {/* Time */}
+                  <span className="text-[0.8125rem] text-[var(--text-muted)]">{timeAgo(a.createdAt)}</span>
+
+                  {/* Resolve */}
+                  <button
+                    onClick={() => handleResolve(a.id)}
+                    disabled={resolving === a.id}
+                    className={`px-3.5 py-1.5 rounded-lg border-none font-semibold text-[0.8125rem] transition-all duration-200 cursor-pointer ${
+                      resolving === a.id
+                        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                        : "bg-[var(--primary)] text-white hover:opacity-90"
+                    }`}
                   >
-                    {alert.message}
-                  </div>
+                    {resolving === a.id ? "…" : "Resolve"}
+                  </button>
                 </div>
-
-                {/* Time */}
-                <span style={{ fontSize: "0.8125rem", color: "#94a3b8" }}>
-                  {timeAgo(alert.createdAt)}
-                </span>
-
-                {/* Resolve button */}
-                <button
-                  onClick={() => handleResolve(alert.id)}
-                  disabled={resolving === alert.id}
-                  style={{
-                    padding: "0.4rem 0.875rem",
-                    borderRadius: "0.5rem",
-                    border: "none",
-                    background: resolving === alert.id ? "#e2e8f0" : "#212070",
-                    color: resolving === alert.id ? "#94a3b8" : "white",
-                    fontWeight: 600,
-                    fontSize: "0.8125rem",
-                    cursor: resolving === alert.id ? "not-allowed" : "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {resolving === alert.id ? "…" : "Resolve"}
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </>
         )}
       </div>

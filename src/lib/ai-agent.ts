@@ -122,6 +122,9 @@ Critical rules:
 /**
  * Generate AI response for a patient interaction
  * Returns the assistant message and whether escalation is needed
+ *
+ * Special value: userMessage === "__PROACTIVE_OUTREACH__"
+ * → generates a proactive check-in message instead of a response
  */
 export async function generatePatientResponse(
   patientId: string,
@@ -130,6 +133,28 @@ export async function generatePatientResponse(
 ): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string }> {
   const ctx = await loadPatientContext(patientId)
   const systemPrompt = buildSystemPrompt(ctx)
+
+  // Proactive outreach mode — generate a friendly check-in message
+  if (userMessage === '__PROACTIVE_OUTREACH__') {
+    const proactiveSystemPrompt = systemPrompt + `\n\nYou are initiating proactive outreach.
+Write a brief, warm, personalized check-in SMS (max 280 chars). 
+Ask how they are doing, mention one specific medication or health goal from their profile.
+End with "Reply HELP for assistance or STOP to unsubscribe."
+Do NOT ask multiple questions. Keep it conversational and concise.`
+
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 200,
+      system: proactiveSystemPrompt,
+      messages: [{ role: 'user', content: 'Generate proactive outreach message.' }]
+    })
+
+    const response = completion.content[0].type === 'text'
+      ? completion.content[0].text.slice(0, 320)
+      : `Hi ${ctx.firstName}, checking in from your ClawHealth care team. How are you feeling today? Reply HELP for assistance.`
+
+    return { response, requiresEscalation: false }
+  }
 
   // Emergency keywords that require immediate physician alert
   const emergencyKeywords = [
