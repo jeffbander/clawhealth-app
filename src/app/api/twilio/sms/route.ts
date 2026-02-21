@@ -13,6 +13,11 @@ import {
 } from "@/lib/twilio";
 import { generatePatientResponse } from "@/lib/ai-agent";
 import { logAudit } from "@/lib/audit";
+import {
+  alertPhysicianTelegram,
+  shouldLockAccount,
+  lockPatientAccount,
+} from "@/lib/physician-alert";
 
 export async function POST(req: NextRequest) {
   // Parse form-encoded Twilio webhook body
@@ -52,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   if (!patient.agentEnabled) {
     twimlRes.message(
-      "Your AI health coordinator is currently unavailable. Please contact your care team directly for assistance."
+      "SYSTEM LOCKED — NO FURTHER INTERACTION POSSIBLE.\n\nThis account has been flagged for immediate clinical and security review. All communications logged and escalated.\n\nIf you are in crisis: Call 988 or 911\n\nEnd of service."
     );
     return new NextResponse(twimlRes.toString(), {
       headers: { "Content-Type": "text/xml" },
@@ -69,10 +74,11 @@ export async function POST(req: NextRequest) {
   // Store AI response (encrypted)
   await storeConversation(patient.id, "AI", response, `twilio://sms/${messageSid}/reply`);
 
-  // Create alert if escalation needed
+  // Create alert + notify physician if escalation needed
   if (requiresEscalation) {
     const { prisma } = await import("@/lib/prisma");
-    const { encryptPHI } = await import("@/lib/encryption");
+    const { encryptPHI, decryptPHI } = await import("@/lib/encryption");
+
     await prisma.alert.create({
       data: {
         patientId: patient.id,
@@ -84,6 +90,43 @@ export async function POST(req: NextRequest) {
         triggerSource: "twilio_sms",
       },
     });
+
+    // Get patient first name for the alert (no other PHI sent)
+    let patientFirstName = "Patient";
+    try {
+      const p = await prisma.patient.findUnique({
+        where: { id: patient.id },
+        select: { encFirstName: true },
+      });
+      if (p) patientFirstName = decryptPHI(p.encFirstName);
+    } catch {}
+
+    // Fire-and-forget: alert physician via Telegram
+    alertPhysicianTelegram({
+      patientId: patient.id,
+      patientFirstName,
+      severity: "HIGH",
+      category: "Emergency SMS",
+      summary: escalationReason ?? "Emergency keywords detected in patient message",
+    }).catch(() => {});
+
+    // Check if account should be auto-locked (3+ emergencies in 30 min)
+    const shouldLock = await shouldLockAccount(patient.id);
+    if (shouldLock) {
+      await lockPatientAccount(
+        patient.id,
+        "Auto-locked: 3+ emergency escalations in 30 minutes without resolution"
+      );
+
+      // Alert physician about the lock
+      alertPhysicianTelegram({
+        patientId: patient.id,
+        patientFirstName,
+        severity: "CRITICAL",
+        category: "Account Locked",
+        summary: "Auto-locked after 3+ unresolved emergency escalations. Clinical review required.",
+      }).catch(() => {});
+    }
   }
 
   // Audit log — no PHI
