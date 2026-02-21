@@ -23,6 +23,8 @@ const isTwilioRoute = createRouteMatcher(['/api/twilio(.*)'])
 const isTestRoute = createRouteMatcher(['/api/test(.*)'])
 // Vercel cron jobs use Authorization: Bearer <CRON_SECRET>
 const isCronRoute = createRouteMatcher(['/api/cron(.*)'])
+// Patient self-enrollment (public, no auth needed)
+const isEnrollRoute = createRouteMatcher(['/api/patients/enroll'])
 
 export default clerkMiddleware(async (auth, req) => {
   // Skip Clerk auth for Twilio webhooks (they use signature validation)
@@ -31,6 +33,8 @@ export default clerkMiddleware(async (auth, req) => {
   if (isTestRoute(req) && process.env.NODE_ENV !== 'production') return NextResponse.next()
   // Skip Clerk auth for cron jobs (they use CRON_SECRET)
   if (isCronRoute(req)) return NextResponse.next()
+  // Skip Clerk auth for patient self-enrollment
+  if (isEnrollRoute(req)) return NextResponse.next()
 
   const { userId } = await auth()
   
