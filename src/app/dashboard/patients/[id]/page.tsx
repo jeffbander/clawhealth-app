@@ -7,6 +7,7 @@ import { getPatientCCMStatus } from "@/lib/ccm-billing";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import PatientInstructions from "./PatientInstructions";
+import PhysicianActions from "./PhysicianActions";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ export default async function PatientDetailPage({
         },
         conversations: { orderBy: { createdAt: "desc" }, take: 20 },
         carePlans: { where: { active: true }, take: 1 },
-        alerts: { where: { resolved: false }, orderBy: { createdAt: "desc" } },
+        alerts: { where: { resolved: false }, orderBy: [{ severity: "asc" }, { createdAt: "desc" }] },
       },
     }),
     getPatientCCMStatus(prisma, id).catch(() => null),
@@ -276,6 +277,19 @@ export default async function PatientDetailPage({
           )}
         </Card>
       </div>
+
+      {/* Physician Actions — message patient + resolve alerts */}
+      <PhysicianActions
+        patientId={id}
+        patientName={firstName}
+        hasPhone={!!patient.encPhone}
+        alerts={alerts.map((a) => ({
+          id: a.id,
+          severity: a.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
+          category: a.category,
+          message: a.message,
+        }))}
+      />
 
       {/* AI Instructions */}
       <PatientInstructions patientId={id} />

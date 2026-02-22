@@ -8,6 +8,7 @@ import { SidebarNav } from "./SidebarNav";
 const navLinks = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/dashboard/patients", label: "Patients", icon: "👥" },
+  { href: "/dashboard/inbox", label: "Inbox", icon: "✉️" },
   { href: "/dashboard/patients/onboard", label: "Onboard Patient", icon: "📋" },
   { href: "/dashboard/alerts", label: "Alerts", icon: "🔔" },
   { href: "/dashboard/care-plans", label: "Care Plans", icon: "📝" },
