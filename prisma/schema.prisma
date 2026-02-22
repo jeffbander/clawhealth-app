@@ -46,8 +46,9 @@ model Patient {
   riskLevel      String   @default("MEDIUM")
   primaryDx      String?
   encConditions  String
-  agentEnabled   Boolean  @default(true)
-  lastInteraction DateTime?
+  agentEnabled           Boolean  @default(true)
+  encCustomInstructions  String?  // Encrypted per-patient AI overrides (allergies, dietary, preferences)
+  lastInteraction        DateTime?
   physicianId    String
   physician      Physician @relation(fields: [physicianId], references: [id])
   conversations  Conversation[]
@@ -62,6 +63,25 @@ model Patient {
   @@index([organizationId])
   @@index([physicianId])
   @@index([clerkUserId])
+}
+
+model ConditionTemplate {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  slug               String   // e.g. "heart-failure", "atrial-fibrillation"
+  conditionName      String   // Display name: "Heart Failure"
+  matchPatterns      String   // JSON array of match strings
+  monitoringProtocol String   @db.Text
+  redFlags           String   @db.Text
+  yellowFlags        String   @db.Text
+  commonQuestions    String   @db.Text
+  medicationGuidance String   @db.Text
+  conversationStyle  String   @db.Text
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  @@unique([organizationId, slug])
+  @@index([organizationId])
 }
 
 model Physician {

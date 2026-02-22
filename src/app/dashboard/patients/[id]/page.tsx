@@ -6,6 +6,7 @@ import { decryptPHI, decryptJSON } from "@/lib/encryption";
 import { getPatientCCMStatus } from "@/lib/ccm-billing";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import PatientInstructions from "./PatientInstructions";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -278,6 +279,9 @@ export default async function PatientDetailPage({
           )}
         </SectionCard>
       </div>
+
+      {/* AI Instructions — patient-level overrides */}
+      <PatientInstructions patientId={id} />
 
       {/* Conversation history */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { PrismaClient } from '@prisma/client'
 import { decryptPHI, decryptJSON, encryptPHI } from './encryption'
 import { getConditionPrompts, buildConditionPromptSection } from './condition-prompts'
+import { loadConditionTemplates, matchConditions, buildConditionSection } from './condition-prompts-db'
 
 const prisma = new PrismaClient()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -18,6 +19,8 @@ interface PatientContext {
   recentVitals: Array<{ type: string; value: string; recordedAt: Date }>
   activeAlerts: Array<{ severity: string; category: string }>
   carePlan?: string
+  customInstructions?: string
+  organizationId: string
   lastInteraction?: Date | null
 }
 
@@ -62,6 +65,10 @@ export async function loadPatientContext(patientId: string): Promise<PatientCont
     ? decryptPHI(patient.carePlans[0].encContent)
     : undefined
 
+  const customInstructions = patient.encCustomInstructions
+    ? decryptPHI(patient.encCustomInstructions)
+    : undefined
+
   return {
     firstName,
     conditions,
@@ -69,6 +76,8 @@ export async function loadPatientContext(patientId: string): Promise<PatientCont
     recentVitals,
     activeAlerts,
     carePlan,
+    customInstructions,
+    organizationId: patient.organizationId,
     lastInteraction: patient.lastInteraction
   }
 }
@@ -77,7 +86,7 @@ export async function loadPatientContext(patientId: string): Promise<PatientCont
  * Build HIPAA-safe system prompt for the patient agent
  * Uses decrypted context but produces a non-loggable prompt
  */
-function buildSystemPrompt(ctx: PatientContext): string {
+async function buildSystemPrompt(ctx: PatientContext): Promise<string> {
   const medList = ctx.medications.map(m =>
     `- ${m.drug} ${m.dose} ${m.frequency} (adherence: ${Math.round(m.adherenceRate)}%)`
   ).join('\n')
@@ -90,9 +99,21 @@ function buildSystemPrompt(ctx: PatientContext): string {
     `- ${a.severity} ${a.category} alert`
   ).join('\n')
 
-  // Get condition-specific clinical protocols
-  const matchedPrompts = getConditionPrompts(ctx.conditions)
-  const conditionSection = buildConditionPromptSection(matchedPrompts)
+  // Get condition-specific clinical protocols (DB first, fallback to hardcoded)
+  let conditionSection = ''
+  try {
+    const dbTemplates = await loadConditionTemplates(ctx.organizationId)
+    if (dbTemplates.length > 0) {
+      const matched = matchConditions(ctx.conditions, dbTemplates)
+      conditionSection = buildConditionSection(matched)
+    }
+  } catch {
+    // Fallback to hardcoded
+  }
+  if (!conditionSection) {
+    const matchedPrompts = getConditionPrompts(ctx.conditions)
+    conditionSection = buildConditionPromptSection(matchedPrompts)
+  }
 
   // Determine if this is a first interaction (onboarding)
   const isNewPatient = !ctx.lastInteraction
@@ -129,6 +150,11 @@ ${ctx.activeAlerts.length > 0 ? `Active alerts:\n${alertsList}` : ''}
 
 ${ctx.carePlan ? `Care plan summary:\n${ctx.carePlan}` : ''}
 ${conditionSection}
+${ctx.customInstructions ? `
+=== PATIENT-SPECIFIC INSTRUCTIONS ===
+The following are specific to ${ctx.firstName}. These override general guidance when they conflict:
+${ctx.customInstructions}
+` : ''}
 ${onboardingSection}
 Communication rules:
 1. NEVER provide specific medical diagnoses
@@ -261,7 +287,7 @@ export async function generatePatientResponse(
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string }> {
   const ctx = await loadPatientContext(patientId)
-  const systemPrompt = buildSystemPrompt(ctx)
+  const systemPrompt = await buildSystemPrompt(ctx)
 
   // Load conversation history from DB if not provided
   const history = conversationHistory?.length

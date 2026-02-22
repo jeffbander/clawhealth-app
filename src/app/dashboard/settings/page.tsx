@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
+import ConditionTemplateEditor from "./ConditionTemplateEditor";
 
 export default async function SettingsPage() {
   const { userId, orgId } = await auth();
@@ -8,7 +9,7 @@ export default async function SettingsPage() {
   if (!userId) return null;
 
   return (
-    <div style={{ maxWidth: "700px", margin: "0 auto" }}>
+    <div style={{ maxWidth: "900px", margin: "0 auto" }}>
       <div style={{ marginBottom: "1.5rem" }}>
         <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#212070", margin: 0 }}>
           ⚙️ Settings
@@ -62,6 +63,11 @@ export default async function SettingsPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Disease-Specific Prompts */}
+      <div style={{ marginBottom: "1.25rem" }}>
+        <ConditionTemplateEditor />
       </div>
 
       {/* Org Info */}
