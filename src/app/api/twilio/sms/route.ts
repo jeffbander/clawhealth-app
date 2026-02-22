@@ -77,8 +77,9 @@ export async function POST(req: NextRequest) {
   const twimlRes = messagingTwiml();
 
   if (!patient) {
+    const enrollUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.clawmd.ai";
     twimlRes.message(
-      "Thank you for contacting ClawHealth. We could not find your account. Please contact your care team directly."
+      `Welcome to ClawHealth! 👋\n\nYour AI-powered heart health companion, built by cardiologists.\n\nTo get started, enroll here:\n${enrollUrl}/enroll\n\nIt takes 2 minutes. Once enrolled, you can text this number anytime for personalized health support.`
     );
     return new NextResponse(twimlRes.toString(), {
       headers: { "Content-Type": "text/xml" },
