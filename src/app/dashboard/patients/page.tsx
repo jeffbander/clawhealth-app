@@ -5,23 +5,31 @@ import { logAudit, getAuditContext } from "@/lib/audit";
 import { decryptPHI } from "@/lib/encryption";
 import Link from "next/link";
 
-const RISK_STYLES: Record<string, string> = {
-  CRITICAL: "bg-red-50 text-red-700 border-red-200",
-  HIGH: "bg-orange-50 text-orange-700 border-orange-200",
-  MEDIUM: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  LOW: "bg-green-50 text-green-700 border-green-200",
+const RISK_BADGE: Record<string, string> = {
+  CRITICAL: "bg-red-50 text-red-700 ring-1 ring-red-600/10",
+  HIGH: "bg-orange-50 text-orange-700 ring-1 ring-orange-600/10",
+  MEDIUM: "bg-amber-50 text-amber-700 ring-1 ring-amber-600/10",
+  LOW: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10",
 };
-const RISK_STAT: Record<string, string> = {
-  CRITICAL: "bg-red-50 border-red-200 text-red-700",
-  HIGH: "bg-orange-50 border-orange-200 text-orange-700",
-  MEDIUM: "bg-yellow-50 border-yellow-200 text-yellow-700",
-  LOW: "bg-green-50 border-green-200 text-green-700",
+
+const RISK_BORDER: Record<string, string> = {
+  CRITICAL: "border-l-red-500",
+  HIGH: "border-l-orange-400",
+  MEDIUM: "border-l-amber-400",
+  LOW: "border-l-emerald-400",
+};
+
+const RISK_COUNT_BG: Record<string, string> = {
+  CRITICAL: "bg-red-500",
+  HIGH: "bg-orange-500",
+  MEDIUM: "bg-amber-500",
+  LOW: "bg-emerald-500",
 };
 
 function timeAgo(date: Date | null): string {
   if (!date) return "Never";
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (secs < 60) return `${secs}s ago`;
+  if (secs < 60) return "just now";
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
   return `${Math.floor(secs / 86400)}d ago`;
@@ -41,6 +49,7 @@ export default async function PatientsPage() {
         select: {
           alerts: { where: { resolved: false } },
           medications: { where: { active: true } },
+          conversations: true,
         },
       },
     },
@@ -59,101 +68,126 @@ export default async function PatientsPage() {
   const riskOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
   decrypted.sort((a, b) => riskOrder.indexOf(a.riskLevel) - riskOrder.indexOf(b.riskLevel));
 
+  const riskCounts = Object.fromEntries(
+    riskOrder.map((r) => [r, decrypted.filter((p) => p.riskLevel === r).length])
+  );
+
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--primary)]">Patient Roster</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-1">{decrypted.length} patients enrolled</p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Patients</h1>
+          <p className="text-sm text-gray-400 mt-0.5">{decrypted.length} enrolled</p>
         </div>
-        <Link
-          href="/dashboard/patients/add"
-          className="inline-flex items-center gap-2 bg-gradient-to-r from-[var(--primary)] to-[var(--accent)] text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity duration-200 no-underline"
-        >
-          + Add Patient
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/dashboard/patients/onboard"
+            className="inline-flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50 transition-colors no-underline shadow-sm"
+          >
+            📋 EMR Onboard
+          </Link>
+          <Link
+            href="/dashboard/patients/add"
+            className="inline-flex items-center gap-2 text-white px-4 py-2 rounded-xl text-sm font-semibold no-underline shadow-sm hover:opacity-90 transition-opacity"
+            style={{ background: "linear-gradient(135deg, #212070, #06ABEB)" }}
+          >
+            + Add Patient
+          </Link>
+        </div>
       </div>
 
-      {/* Risk summary */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
-        {riskOrder.map((level) => {
-          const count = decrypted.filter((p) => p.riskLevel === level).length;
-          return (
-            <div key={level} className={`rounded-xl p-3.5 text-center border ${RISK_STAT[level]}`}>
-              <div className="text-2xl font-bold">{count}</div>
-              <div className="text-xs font-semibold">{level}</div>
+      {/* Risk summary pills */}
+      <div className="flex gap-2">
+        {riskOrder.map((level) => (
+          <div
+            key={level}
+            className="flex items-center gap-2 bg-white rounded-xl px-4 py-2.5 border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
+          >
+            <span className={`w-2.5 h-2.5 rounded-full ${RISK_COUNT_BG[level]}`} />
+            <span className="text-sm font-bold text-gray-900">{riskCounts[level]}</span>
+            <span className="text-xs text-gray-400 font-medium">{level}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Patient list */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+        {/* Table header */}
+        <div className="hidden lg:grid grid-cols-[1fr_90px_140px_70px_90px] gap-4 px-5 py-3 bg-gray-50/50 border-b border-gray-100">
+          {["Patient", "Risk", "Primary DX", "Alerts", "Last Active"].map((h) => (
+            <div key={h} className="text-[0.6875rem] font-semibold text-gray-400 uppercase tracking-wider">
+              {h}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Patient table */}
-      <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
-        {/* Header row */}
-        <div className="hidden lg:grid grid-cols-[1fr_100px_140px_80px_90px_70px] gap-4 px-5 py-3 bg-[var(--background)] border-b border-[var(--border)]">
-          {["Patient", "Risk", "Primary DX", "Alerts", "Last Visit", ""].map((h) => (
-            <div key={h} className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</div>
           ))}
         </div>
 
         {decrypted.length === 0 ? (
-          <div className="p-12 text-center text-[var(--text-muted)]">
-            <div className="text-4xl mb-2">👥</div>
-            <div className="font-semibold mb-1">No patients yet</div>
-            <Link href="/dashboard/patients/add" className="text-[var(--accent)] font-medium hover:underline">
-              Add your first patient →
+          <div className="p-16 text-center">
+            <div className="text-4xl mb-3">👥</div>
+            <div className="font-semibold text-gray-900 mb-1">No patients yet</div>
+            <p className="text-sm text-gray-400 mb-4">Onboard your first patient to get started</p>
+            <Link
+              href="/dashboard/patients/onboard"
+              className="text-sm text-[#06ABEB] font-medium no-underline hover:underline"
+            >
+              Onboard patient →
             </Link>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--border-light)]">
-            {decrypted.map((p) => (
-              <div
-                key={p.id}
-                className="grid grid-cols-[1fr_100px_140px_80px_90px_70px] gap-4 px-5 py-3.5 items-center hover:bg-[var(--background)] transition-colors duration-150"
-              >
-                {/* Name */}
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--accent)] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                    {p.firstName.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-sm text-[var(--text-primary)]">{p.firstName} {p.lastName}</div>
-                    <div className="text-xs text-[var(--text-muted)]">{p._count.medications} meds active</div>
-                  </div>
-                </div>
-
-                {/* Risk */}
-                <span className={`inline-block text-[0.6875rem] font-bold px-2.5 py-0.5 rounded-full border ${RISK_STYLES[p.riskLevel] ?? ""}`}>
-                  {p.riskLevel}
-                </span>
-
-                {/* DX */}
-                <div className="text-[0.8125rem] text-[var(--text-secondary)]">{p.primaryDx ?? "—"}</div>
-
-                {/* Alerts */}
-                <div>
-                  {p._count.alerts > 0 ? (
-                    <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 border border-red-200 rounded-full px-2 py-0.5 text-xs font-semibold">
-                      🔔 {p._count.alerts}
-                    </span>
-                  ) : (
-                    <span className="text-green-600 text-[0.8125rem]">✅</span>
-                  )}
-                </div>
-
-                {/* Last Visit */}
-                <div className="text-[0.8125rem] text-[var(--text-muted)]">{timeAgo(p.lastInteraction)}</div>
-
-                {/* Action */}
+          <div className="divide-y divide-gray-50">
+            {decrypted.map((p) => {
+              const initials = `${p.firstName.charAt(0)}${p.lastName.charAt(0)}`.toUpperCase();
+              return (
                 <Link
+                  key={p.id}
                   href={`/dashboard/patients/${p.id}`}
-                  className="inline-block bg-[var(--primary)] text-white px-3 py-1.5 rounded-lg text-xs font-semibold text-center hover:opacity-90 transition-opacity duration-200 no-underline"
+                  className={`grid grid-cols-1 lg:grid-cols-[1fr_90px_140px_70px_90px] gap-2 lg:gap-4 px-5 py-3.5 items-center hover:bg-gray-50/70 transition-all duration-150 no-underline border-l-[3px] ${RISK_BORDER[p.riskLevel] ?? "border-l-gray-200"}`}
                 >
-                  View
+                  {/* Name */}
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow-sm"
+                      style={{ background: "linear-gradient(135deg, #212070, #06ABEB)" }}
+                    >
+                      {initials}
+                    </div>
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {p.firstName} {p.lastName}
+                      </div>
+                      <div className="text-xs text-gray-400">
+                        {p._count.medications} meds · {p._count.conversations} msgs
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Risk */}
+                  <div>
+                    <span className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-md ${RISK_BADGE[p.riskLevel] ?? ""}`}>
+                      {p.riskLevel}
+                    </span>
+                  </div>
+
+                  {/* DX */}
+                  <div className="text-sm text-gray-500 truncate">{p.primaryDx ?? "—"}</div>
+
+                  {/* Alerts */}
+                  <div>
+                    {p._count.alerts > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-md ring-1 ring-red-600/10">
+                        {p._count.alerts}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-emerald-500">✓</span>
+                    )}
+                  </div>
+
+                  {/* Last Active */}
+                  <div className="text-xs text-gray-400">{timeAgo(p.lastInteraction)}</div>
                 </Link>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

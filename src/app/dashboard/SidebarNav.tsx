@@ -12,7 +12,7 @@ export function SidebarNav({ links }: { links: NavLink[] }) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex-1 py-3 px-3 space-y-1">
+    <nav className="flex-1 py-4 px-3 space-y-0.5">
       {links.map((link) => {
         const isActive =
           link.href === "/dashboard"
@@ -24,17 +24,23 @@ export function SidebarNav({ links }: { links: NavLink[] }) {
             key={link.href}
             href={link.href}
             className={`
-              flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-              transition-all duration-200 no-underline
+              relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[0.8125rem] font-medium
+              transition-all duration-200 no-underline group
               ${
                 isActive
-                  ? "bg-white/15 text-white shadow-sm"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "bg-white/[0.12] text-white shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+                  : "text-white/60 hover:bg-white/[0.07] hover:text-white/90"
               }
             `}
           >
-            <span className="text-lg">{link.icon}</span>
-            {link.label}
+            {/* Active indicator bar */}
+            {isActive && (
+              <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#06ABEB]" />
+            )}
+            <span className="text-base w-5 text-center opacity-90 group-hover:opacity-100 transition-opacity">
+              {link.icon}
+            </span>
+            <span className="tracking-[-0.01em]">{link.label}</span>
           </Link>
         );
       })}
