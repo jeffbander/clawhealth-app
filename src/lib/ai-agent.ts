@@ -8,6 +8,7 @@ import { PrismaClient } from '@prisma/client'
 import { decryptPHI, decryptJSON, encryptPHI } from './encryption'
 import { getConditionPrompts, buildConditionPromptSection } from './condition-prompts'
 import { loadConditionTemplates, matchConditions, buildConditionSection } from './condition-prompts-db'
+import { checkInteractions, DrugInteraction } from './med-interactions'
 
 const prisma = new PrismaClient()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -91,6 +92,18 @@ async function buildSystemPrompt(ctx: PatientContext): Promise<string> {
     `- ${m.drug} ${m.dose} ${m.frequency} (adherence: ${Math.round(m.adherenceRate)}%)`
   ).join('\n')
 
+  // Check drug interactions
+  const interactions = checkInteractions(
+    ctx.medications.map(m => ({ drugName: m.drug, active: true }))
+  )
+  const interactionWarnings = interactions.length > 0
+    ? `\n⚠️ KNOWN DRUG INTERACTIONS (${interactions.length}):\n` +
+      interactions.map(ix =>
+        `- ${ix.severity.toUpperCase()}: ${ix.drug1} + ${ix.drug2} — ${ix.description}. ${ix.recommendation}`
+      ).join('\n') +
+      `\nIMPORTANT: If the patient mentions starting any new medication, check it against their current list. If a patient mentions taking NSAIDs (ibuprofen, Advil, naproxen, Aleve), warn about interactions with their cardiac medications. Always recommend they confirm new medications with their physician.`
+    : ''
+
   const vitalsList = ctx.recentVitals.slice(0, 5).map(v =>
     `- ${v.type}: ${v.value} (${v.recordedAt.toLocaleDateString()})`
   ).join('\n')
@@ -142,6 +155,7 @@ Current conditions: ${ctx.conditions.join(', ')}
 
 Current medications:
 ${medList || 'None on file'}
+${interactionWarnings}
 
 Recent vitals:
 ${vitalsList || 'None recorded'}
