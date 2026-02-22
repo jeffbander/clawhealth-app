@@ -2,36 +2,18 @@
 import { useState, useEffect } from "react";
 
 interface Interaction {
+  severity: "critical" | "major" | "moderate";
   drug1: string;
   drug2: string;
-  severity: "CRITICAL" | "HIGH" | "MODERATE";
-  effect: string;
+  description: string;
+  clinicalSignificance: string;
   recommendation: string;
-  mechanism?: string;
 }
 
-const SEVERITY_STYLE: Record<string, { border: string; bg: string; text: string; badge: string; icon: string }> = {
-  CRITICAL: {
-    border: "border-l-red-500",
-    bg: "bg-red-50/50",
-    text: "text-red-700",
-    badge: "bg-red-100 text-red-800 ring-1 ring-red-600/10",
-    icon: "🚨",
-  },
-  HIGH: {
-    border: "border-l-orange-400",
-    bg: "bg-orange-50/50",
-    text: "text-orange-700",
-    badge: "bg-orange-100 text-orange-800 ring-1 ring-orange-600/10",
-    icon: "⚠️",
-  },
-  MODERATE: {
-    border: "border-l-amber-300",
-    bg: "bg-amber-50/30",
-    text: "text-amber-700",
-    badge: "bg-amber-100 text-amber-800 ring-1 ring-amber-600/10",
-    icon: "💡",
-  },
+const SEVERITY_CONFIG = {
+  critical: { bg: "bg-red-50", border: "border-red-200", text: "text-red-700", badge: "bg-red-100 text-red-800", icon: "🚨", label: "CRITICAL" },
+  major: { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700", badge: "bg-orange-100 text-orange-800", icon: "⚠️", label: "MAJOR" },
+  moderate: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", badge: "bg-amber-100 text-amber-800", icon: "💡", label: "MODERATE" },
 };
 
 export default function MedInteractions({ patientId }: { patientId: string }) {
@@ -42,110 +24,113 @@ export default function MedInteractions({ patientId }: { patientId: string }) {
   useEffect(() => {
     fetch(`/api/patients/${patientId}/interactions`)
       .then(r => r.json())
-      .then(data => {
-        setInteractions(data.interactions || []);
-        setLoading(false);
+      .then(d => {
+        setInteractions(d.interactions || []);
+        setLoading(true); // done
       })
-      .catch(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [patientId]);
 
   if (loading) {
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-        <div className="text-sm text-gray-400">Checking medication interactions...</div>
+        <h3 className="font-semibold text-gray-900 text-[0.9375rem] m-0">⚕️ Drug Interactions</h3>
+        <p className="text-sm text-gray-400 mt-2">Checking medications...</p>
       </div>
     );
   }
 
   if (interactions.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-gray-50 flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900">💊 Medication Interactions</span>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-gray-900 text-[0.9375rem] m-0">⚕️ Drug Interactions</h3>
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            ✓ No known interactions
+          </span>
         </div>
-        <div className="py-8 text-center">
-          <span className="text-2xl">✅</span>
-          <p className="text-sm text-gray-500 mt-2 m-0">No known interactions detected</p>
-        </div>
+        <p className="text-xs text-gray-400 mt-2 m-0">
+          Based on active medications. Not a substitute for pharmacist review.
+        </p>
       </div>
     );
   }
 
-  const critCount = interactions.filter(i => i.severity === "CRITICAL").length;
-  const highCount = interactions.filter(i => i.severity === "HIGH").length;
+  const criticalCount = interactions.filter(i => i.severity === "critical").length;
+  const majorCount = interactions.filter(i => i.severity === "major").length;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900">💊 Medication Interactions</span>
-          <span className={`text-[0.6875rem] font-bold px-2 py-0.5 rounded-full ${
-            critCount > 0 ? "bg-red-100 text-red-700" : highCount > 0 ? "bg-orange-100 text-orange-700" : "bg-amber-100 text-amber-700"
+          <h3 className="font-semibold text-gray-900 text-[0.9375rem] m-0">⚕️ Drug Interactions</h3>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            criticalCount > 0 ? "bg-red-100 text-red-700" :
+            majorCount > 0 ? "bg-orange-100 text-orange-700" :
+            "bg-amber-100 text-amber-700"
           }`}>
             {interactions.length} found
           </span>
         </div>
-        {critCount > 0 && (
-          <span className="text-xs font-bold text-red-600 animate-pulse">
-            🚨 {critCount} CRITICAL
-          </span>
-        )}
+        <p className="text-xs text-gray-400 m-0">
+          Physician review recommended
+        </p>
       </div>
 
       <div className="divide-y divide-gray-50">
         {interactions.map((ix, idx) => {
-          const style = SEVERITY_STYLE[ix.severity];
+          const config = SEVERITY_CONFIG[ix.severity];
           const isExpanded = expanded.has(idx);
 
           return (
             <div
               key={idx}
-              className={`border-l-4 ${style.border} ${style.bg} transition-colors`}
+              className={`${config.bg} border-l-4 ${config.border} transition-colors`}
             >
-              <div
-                className="px-5 py-3.5 cursor-pointer"
+              <button
                 onClick={() => {
-                  const next = new Set(expanded);
-                  next.has(idx) ? next.delete(idx) : next.add(idx);
-                  setExpanded(next);
+                  setExpanded(prev => {
+                    const next = new Set(prev);
+                    next.has(idx) ? next.delete(idx) : next.add(idx);
+                    return next;
+                  });
                 }}
+                className="w-full text-left px-5 py-3.5 cursor-pointer bg-transparent border-none"
               >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs">{style.icon}</span>
-                  <span className={`text-[0.6875rem] font-bold px-1.5 py-0.5 rounded ${style.badge}`}>
-                    {ix.severity}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-[0.625rem] font-bold px-1.5 py-0.5 rounded ${config.badge}`}>
+                    {config.icon} {config.label}
                   </span>
-                  <span className="text-[0.8125rem] font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-gray-900">
                     {ix.drug1} + {ix.drug2}
                   </span>
-                  <span className="ml-auto text-xs text-gray-400">
+                  <span className="text-xs text-gray-500 ml-auto">
                     {isExpanded ? "▲" : "▼"}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600 m-0 leading-relaxed">{ix.effect}</p>
-              </div>
+                <p className="text-sm text-gray-600 mt-1 m-0">{ix.description}</p>
+              </button>
 
               {isExpanded && (
                 <div className="px-5 pb-4 space-y-2">
-                  <div className="bg-white/80 rounded-xl p-3 border border-gray-100">
-                    <div className="text-[0.6875rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                      Recommendation
-                    </div>
-                    <p className="text-sm text-gray-700 m-0 leading-relaxed">{ix.recommendation}</p>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Clinical Significance</div>
+                    <p className="text-sm text-gray-700 m-0">{ix.clinicalSignificance}</p>
                   </div>
-                  {ix.mechanism && (
-                    <div className="bg-white/80 rounded-xl p-3 border border-gray-100">
-                      <div className="text-[0.6875rem] font-semibold text-gray-400 uppercase tracking-wider mb-1">
-                        Mechanism
-                      </div>
-                      <p className="text-[0.8125rem] text-gray-500 m-0 italic">{ix.mechanism}</p>
-                    </div>
-                  )}
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Recommendation</div>
+                    <p className="text-sm text-gray-700 m-0 font-medium">{ix.recommendation}</p>
+                  </div>
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+
+      <div className="px-5 py-3 bg-gray-50/50 text-[0.625rem] text-gray-400 text-center">
+        Based on known cardiology drug interactions (ACC/AHA guidelines). Not a substitute for comprehensive pharmacist review.
       </div>
     </div>
   );

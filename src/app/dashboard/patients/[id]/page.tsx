@@ -293,7 +293,7 @@ export default async function PatientDetailPage({
         }))}
       />
 
-      {/* Medication Interactions */}
+      {/* Drug Interactions */}
       <MedInteractions patientId={id} />
 
       {/* AI Instructions */}

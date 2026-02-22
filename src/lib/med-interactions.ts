@@ -1,233 +1,197 @@
 /**
- * Medication Interaction Database
- * Cardiology-focused drug-drug interactions
- * Board-level accuracy — reviewed for Chief of Cardiology use
+ * Medication Interaction Checker
+ * Flags known dangerous combinations for cardiology patients
+ * Source: ACC/AHA guidelines, UpToDate, Lexicomp references
  * 
- * Severity levels:
- *   CRITICAL — contraindicated, life-threatening risk
- *   HIGH — major interaction, requires monitoring or dose adjustment
- *   MODERATE — clinically significant, awareness needed
+ * NOT a replacement for a pharmacist — flags for physician review
  */
 
 export interface DrugInteraction {
+  severity: "critical" | "major" | "moderate";
   drug1: string;
   drug2: string;
-  severity: "CRITICAL" | "HIGH" | "MODERATE";
-  effect: string;
+  description: string;
+  clinicalSignificance: string;
   recommendation: string;
-  mechanism?: string;
 }
-
-// Match patterns: lowercased drug names/classes for fuzzy matching
-type DrugPattern = string[];
 
 interface InteractionRule {
-  patterns1: DrugPattern;
-  patterns2: DrugPattern;
-  severity: "CRITICAL" | "HIGH" | "MODERATE";
-  effect: string;
+  patterns1: string[];
+  patterns2: string[];
+  severity: "critical" | "major" | "moderate";
+  description: string;
+  clinicalSignificance: string;
   recommendation: string;
-  mechanism?: string;
 }
 
+// Known cardiology-relevant drug interactions
 const INTERACTION_RULES: InteractionRule[] = [
   // === CRITICAL ===
   {
-    patterns1: ["warfarin", "coumadin"],
-    patterns2: ["apixaban", "eliquis", "rivaroxaban", "xarelto", "dabigatran", "pradaxa", "edoxaban", "savaysa"],
-    severity: "CRITICAL",
-    effect: "Dual anticoagulation — extreme bleeding risk",
-    recommendation: "NEVER combine. Use one anticoagulant only. Immediate physician review required.",
-    mechanism: "Additive anticoagulation via different pathways",
+    patterns1: ["entresto", "sacubitril", "valsartan/sacubitril"],
+    patterns2: ["lisinopril", "enalapril", "ramipril", "captopril", "benazepril", "fosinopril", "quinapril"],
+    severity: "critical",
+    description: "ARNI + ACE inhibitor: risk of angioedema",
+    clinicalSignificance: "Concomitant use is CONTRAINDICATED. Risk of life-threatening angioedema.",
+    recommendation: "36-hour washout required between ACE inhibitor and Entresto. Never use together.",
   },
   {
-    patterns1: ["sacubitril", "entresto"],
-    patterns2: ["lisinopril", "enalapril", "ramipril", "benazepril", "captopril", "quinapril", "fosinopril", "perindopril", "trandolapril"],
-    severity: "CRITICAL",
-    effect: "Risk of angioedema — potentially fatal",
-    recommendation: "CONTRAINDICATED. 36-hour washout required between ACE inhibitor and Entresto. Never co-prescribe.",
-    mechanism: "Both increase bradykinin levels; combined effect dramatically raises angioedema risk",
+    patterns1: ["warfarin", "coumadin"],
+    patterns2: ["apixaban", "eliquis", "rivaroxaban", "xarelto", "edoxaban", "savaysa", "dabigatran", "pradaxa"],
+    severity: "critical",
+    description: "Dual anticoagulation: warfarin + DOAC",
+    clinicalSignificance: "Dramatically increased bleeding risk. No clinical benefit from dual anticoagulation.",
+    recommendation: "Use only ONE anticoagulant. Bridge transitions carefully with appropriate washout.",
   },
   {
     patterns1: ["methotrexate"],
-    patterns2: ["nsaid", "ibuprofen", "naproxen", "advil", "aleve", "meloxicam", "diclofenac", "indomethacin", "celecoxib"],
-    severity: "CRITICAL",
-    effect: "Methotrexate toxicity — bone marrow suppression, renal failure",
-    recommendation: "Avoid combination. If unavoidable, requires close monitoring of methotrexate levels and renal function.",
-    mechanism: "NSAIDs reduce renal clearance of methotrexate",
+    patterns2: ["trimethoprim", "bactrim", "sulfamethoxazole"],
+    severity: "critical",
+    description: "Methotrexate + TMP/SMX: bone marrow suppression",
+    clinicalSignificance: "TMP/SMX inhibits methotrexate renal clearance → potentially fatal pancytopenia.",
+    recommendation: "Avoid combination. Use alternative antibiotic.",
   },
+  // === MAJOR ===
   {
-    patterns1: ["dofetilide", "tikosyn"],
-    patterns2: ["verapamil", "calan", "cimetidine", "tagamet", "ketoconazole", "trimethoprim"],
-    severity: "CRITICAL",
-    effect: "QT prolongation, torsades de pointes",
-    recommendation: "CONTRAINDICATED. These drugs increase dofetilide levels dramatically.",
-    mechanism: "Inhibition of renal cation transport / CYP3A4 inhibition increases dofetilide concentration",
+    patterns1: ["amiodarone", "cordarone"],
+    patterns2: ["warfarin", "coumadin"],
+    severity: "major",
+    description: "Amiodarone potentiates warfarin effect",
+    clinicalSignificance: "Amiodarone inhibits CYP2C9 → 30-50% increase in warfarin effect. INR can rise dangerously.",
+    recommendation: "Reduce warfarin dose by 30-50% when starting amiodarone. Monitor INR closely (weekly x 4-6 weeks).",
   },
   {
     patterns1: ["amiodarone", "cordarone"],
-    patterns2: ["dofetilide", "tikosyn", "sotalol", "betapace", "dronedarone", "multaq"],
-    severity: "CRITICAL",
-    effect: "Additive QT prolongation — high risk of fatal arrhythmia",
-    recommendation: "NEVER combine antiarrhythmics with QT-prolonging effects. Choose one agent.",
-    mechanism: "Synergistic prolongation of cardiac repolarization",
+    patterns2: ["digoxin", "lanoxin"],
+    severity: "major",
+    description: "Amiodarone increases digoxin levels",
+    clinicalSignificance: "Amiodarone increases digoxin levels by ~70%. Risk of digoxin toxicity (nausea, arrhythmia, vision changes).",
+    recommendation: "Reduce digoxin dose by 50% when starting amiodarone. Monitor digoxin levels.",
   },
   {
-    patterns1: ["simvastatin", "zocor", "lovastatin", "mevacor"],
+    patterns1: ["spironolactone", "aldactone", "eplerenone", "inspra"],
+    patterns2: ["lisinopril", "enalapril", "ramipril", "losartan", "valsartan", "irbesartan", "candesartan", "olmesartan", "entresto", "sacubitril"],
+    severity: "major",
+    description: "MRA + RAAS inhibitor: hyperkalemia risk",
+    clinicalSignificance: "Both raise potassium. Combined use significantly increases hyperkalemia risk, especially with renal impairment.",
+    recommendation: "Monitor potassium closely (within 1 week of starting, then q2-4 weeks). Hold if K+ >5.5. Avoid if eGFR <30.",
+  },
+  {
+    patterns1: ["ibuprofen", "advil", "motrin", "naproxen", "aleve", "meloxicam", "diclofenac", "celecoxib", "indomethacin"],
+    patterns2: ["warfarin", "coumadin", "apixaban", "eliquis", "rivaroxaban", "xarelto", "clopidogrel", "plavix", "ticagrelor", "brilinta", "prasugrel"],
+    severity: "major",
+    description: "NSAID + anticoagulant/antiplatelet: bleeding risk",
+    clinicalSignificance: "NSAIDs increase GI bleeding risk. Combined with blood thinners → significantly elevated bleeding risk.",
+    recommendation: "Avoid NSAIDs in anticoagulated patients. Use acetaminophen for pain. If NSAID unavoidable, add PPI.",
+  },
+  {
+    patterns1: ["ibuprofen", "advil", "motrin", "naproxen", "aleve", "meloxicam", "diclofenac", "celecoxib", "indomethacin"],
+    patterns2: ["furosemide", "lasix", "torsemide", "bumetanide", "bumex", "hydrochlorothiazide", "hctz", "chlorthalidone", "metolazone"],
+    severity: "major",
+    description: "NSAID + diuretic: reduced diuretic efficacy + AKI risk",
+    clinicalSignificance: "NSAIDs cause sodium and fluid retention, directly opposing diuretics. Risk of acute kidney injury, especially in HF.",
+    recommendation: "Avoid NSAIDs in heart failure patients on diuretics. Use acetaminophen.",
+  },
+  {
+    patterns1: ["diltiazem", "verapamil"],
+    patterns2: ["metoprolol", "carvedilol", "atenolol", "bisoprolol", "propranolol", "nadolol", "sotalol"],
+    severity: "major",
+    description: "Non-dihydropyridine CCB + beta-blocker: bradycardia/heart block",
+    clinicalSignificance: "Both slow AV conduction. Combined use risks symptomatic bradycardia, heart block, or hemodynamic collapse.",
+    recommendation: "Avoid combination unless under specialist supervision with monitoring. Amlodipine is safe with beta-blockers.",
+  },
+  {
+    patterns1: ["flecainide", "tambocor", "propafenone", "rythmol"],
+    patterns2: ["metoprolol", "carvedilol", "atenolol", "sotalol"],
+    severity: "major",
+    description: "IC antiarrhythmic + beta-blocker: proarrhythmic risk",
+    clinicalSignificance: "IC antiarrhythmics can organize atrial flutter to 1:1 conduction. Beta-blocker provides AV node protection but combination needs careful monitoring.",
+    recommendation: "Use together only under electrophysiology guidance. Monitor for bradycardia and proarrhythmic effects.",
+  },
+  // === MODERATE ===
+  {
+    patterns1: ["atorvastatin", "lipitor", "simvastatin", "zocor", "lovastatin"],
     patterns2: ["amiodarone", "cordarone"],
-    severity: "HIGH",
-    effect: "Rhabdomyolysis risk — simvastatin max 20mg with amiodarone",
-    recommendation: "Limit simvastatin to 20mg/day with amiodarone. Consider switching to atorvastatin or rosuvastatin.",
-    mechanism: "Amiodarone inhibits CYP3A4, increasing statin levels",
-  },
-
-  // === HIGH ===
-  {
-    patterns1: ["digoxin", "lanoxin"],
-    patterns2: ["amiodarone", "cordarone"],
-    severity: "HIGH",
-    effect: "Digoxin toxicity — nausea, arrhythmias, visual disturbances",
-    recommendation: "Reduce digoxin dose by 50% when starting amiodarone. Monitor digoxin levels closely.",
-    mechanism: "Amiodarone inhibits P-glycoprotein and renal clearance of digoxin",
-  },
-  {
-    patterns1: ["digoxin", "lanoxin"],
-    patterns2: ["verapamil", "calan", "diltiazem", "cardizem", "tiazac"],
-    severity: "HIGH",
-    effect: "Increased digoxin levels + additive AV nodal blockade",
-    recommendation: "Monitor digoxin levels. Watch for bradycardia. Consider dose reduction.",
-    mechanism: "Calcium channel blockers increase digoxin bioavailability and additive conduction delay",
-  },
-  {
-    patterns1: ["potassium", "k-dur", "klor-con", "potassium chloride"],
-    patterns2: ["spironolactone", "aldactone", "eplerenone", "inspra", "triamterene", "amiloride"],
-    severity: "HIGH",
-    effect: "Hyperkalemia — risk of fatal cardiac arrhythmia",
-    recommendation: "Monitor potassium closely. Avoid potassium supplements with potassium-sparing diuretics unless K+ is documented low.",
-    mechanism: "Additive potassium retention",
+    severity: "moderate",
+    description: "Statin + amiodarone: myopathy risk",
+    clinicalSignificance: "Amiodarone inhibits CYP3A4 → increased statin levels → elevated risk of myopathy/rhabdomyolysis.",
+    recommendation: "Limit simvastatin to 20mg/day with amiodarone. Atorvastatin is lower risk. Monitor for muscle pain.",
   },
   {
     patterns1: ["metformin", "glucophage"],
-    patterns2: ["contrast", "iodinated"],
-    severity: "HIGH",
-    effect: "Lactic acidosis risk with contrast dye",
-    recommendation: "Hold metformin day of and 48h after iodinated contrast. Check renal function before restarting.",
-    mechanism: "Contrast can impair renal function, reducing metformin clearance",
+    patterns2: ["furosemide", "lasix", "torsemide", "bumetanide"],
+    severity: "moderate",
+    description: "Metformin + loop diuretic: lactic acidosis risk with dehydration",
+    clinicalSignificance: "Diuretic-induced volume depletion can impair renal function → metformin accumulation → lactic acidosis risk.",
+    recommendation: "Monitor renal function. Hold metformin if dehydrated or eGFR <30. Ensure adequate hydration.",
   },
   {
-    patterns1: ["carvedilol", "coreg", "metoprolol", "toprol", "lopressor", "atenolol", "bisoprolol", "propranolol"],
-    patterns2: ["verapamil", "calan", "diltiazem", "cardizem"],
-    severity: "HIGH",
-    effect: "Severe bradycardia, heart block, hypotension",
-    recommendation: "Avoid combination of beta-blocker + non-dihydropyridine calcium channel blocker. If necessary, monitor closely.",
-    mechanism: "Additive negative chronotropic and dromotropic effects on AV node",
-  },
-  {
-    patterns1: ["apixaban", "eliquis", "rivaroxaban", "xarelto"],
-    patterns2: ["aspirin", "clopidogrel", "plavix", "ticagrelor", "brilinta", "prasugrel", "effient"],
-    severity: "HIGH",
-    effect: "Increased bleeding risk — triple therapy concern",
-    recommendation: "Minimize duration of triple therapy (anticoagulant + dual antiplatelet). Discuss with cardiologist. Consider PPI for GI protection.",
-    mechanism: "Additive effects on hemostasis via different pathways",
-  },
-  {
-    patterns1: ["lisinopril", "enalapril", "ramipril", "losartan", "valsartan", "irbesartan", "olmesartan", "candesartan", "telmisartan"],
-    patterns2: ["spironolactone", "aldactone", "eplerenone", "inspra"],
-    severity: "HIGH",
-    effect: "Hyperkalemia risk — especially with CKD or diabetes",
-    recommendation: "Monitor potassium within 1-2 weeks of initiation, then regularly. Avoid if eGFR <30. Hold if K+ >5.5.",
-    mechanism: "Both reduce potassium excretion via RAAS blockade",
-  },
-
-  // === MODERATE ===
-  {
-    patterns1: ["lisinopril", "enalapril", "ramipril", "benazepril", "captopril"],
-    patterns2: ["nsaid", "ibuprofen", "naproxen", "advil", "aleve", "meloxicam", "diclofenac", "celecoxib"],
-    severity: "MODERATE",
-    effect: "Reduced antihypertensive effect + increased renal risk",
-    recommendation: "Avoid chronic NSAID use. Short courses (<5 days) with BP and renal monitoring if necessary.",
-    mechanism: "NSAIDs reduce prostaglandin-mediated renal perfusion, opposing ACE inhibitor effects",
-  },
-  {
-    patterns1: ["furosemide", "lasix", "torsemide", "bumetanide"],
-    patterns2: ["nsaid", "ibuprofen", "naproxen", "advil", "aleve", "meloxicam", "diclofenac", "celecoxib"],
-    severity: "MODERATE",
-    effect: "Reduced diuretic efficacy + increased renal impairment risk",
-    recommendation: "Avoid NSAIDs in heart failure patients on diuretics. Use acetaminophen for pain.",
-    mechanism: "NSAIDs inhibit prostaglandin-mediated renal sodium excretion",
-  },
-  {
-    patterns1: ["atorvastatin", "lipitor", "rosuvastatin", "crestor", "simvastatin", "pravastatin"],
-    patterns2: ["gemfibrozil", "lopid"],
-    severity: "MODERATE",
-    effect: "Increased risk of myopathy and rhabdomyolysis",
-    recommendation: "Use fenofibrate instead of gemfibrozil with statins. If gemfibrozil required, avoid simvastatin/lovastatin.",
-    mechanism: "Gemfibrozil inhibits statin glucuronidation, increasing statin exposure",
+    patterns1: ["potassium", "k-dur", "klor-con", "potassium chloride"],
+    patterns2: ["spironolactone", "aldactone", "eplerenone", "inspra", "triamterene"],
+    severity: "moderate",
+    description: "Potassium supplement + potassium-sparing diuretic: hyperkalemia",
+    clinicalSignificance: "Additive potassium retention → risk of dangerous hyperkalemia.",
+    recommendation: "Monitor potassium closely. Typically avoid supplementation with MRAs unless documented hypokalemia.",
   },
   {
     patterns1: ["clopidogrel", "plavix"],
     patterns2: ["omeprazole", "prilosec", "esomeprazole", "nexium"],
-    severity: "MODERATE",
-    effect: "Reduced clopidogrel activation — may decrease antiplatelet effect",
-    recommendation: "Use pantoprazole instead if PPI needed (minimal CYP2C19 interaction). FDA black box warning for omeprazole + clopidogrel.",
-    mechanism: "Omeprazole inhibits CYP2C19, which activates clopidogrel",
+    severity: "moderate",
+    description: "Clopidogrel + PPI: reduced antiplatelet effect",
+    clinicalSignificance: "Omeprazole/esomeprazole inhibit CYP2C19 → reduced clopidogrel activation → potential stent thrombosis risk.",
+    recommendation: "Use pantoprazole instead (minimal CYP2C19 interaction). If PPI needed with clopidogrel, pantoprazole is preferred.",
   },
   {
-    patterns1: ["levothyroxine", "synthroid", "levoxyl"],
-    patterns2: ["calcium", "iron", "ferrous", "antacid", "tums", "omeprazole", "pantoprazole"],
-    severity: "MODERATE",
-    effect: "Reduced levothyroxine absorption",
-    recommendation: "Take levothyroxine on empty stomach, 30-60 min before other medications. Separate calcium/iron by ≥4 hours.",
-    mechanism: "Chelation and altered gastric pH reduce absorption",
-  },
-  {
-    patterns1: ["metoprolol", "toprol", "lopressor"],
-    patterns2: ["fluoxetine", "prozac", "paroxetine", "paxil", "bupropion", "wellbutrin"],
-    severity: "MODERATE",
-    effect: "Increased metoprolol levels — risk of bradycardia/hypotension",
-    recommendation: "Monitor heart rate and blood pressure. Consider dose reduction of metoprolol. Sertraline or escitalopram are safer alternatives.",
-    mechanism: "CYP2D6 inhibition by these antidepressants reduces metoprolol metabolism",
+    patterns1: ["amlodipine", "norvasc"],
+    patterns2: ["simvastatin", "zocor"],
+    severity: "moderate",
+    description: "Amlodipine increases simvastatin levels",
+    clinicalSignificance: "Amlodipine inhibits CYP3A4 → increased simvastatin exposure → elevated myopathy risk.",
+    recommendation: "Limit simvastatin to 20mg/day with amlodipine. Consider switching to atorvastatin or rosuvastatin.",
   },
 ];
 
+function matchesDrug(drugName: string, patterns: string[]): boolean {
+  const lower = drugName.toLowerCase();
+  return patterns.some(p => lower.includes(p.toLowerCase()));
+}
+
 /**
- * Check a patient's medication list for known interactions
+ * Check a list of medications for known interactions
+ * Returns all flagged interactions sorted by severity
  */
-export function checkInteractions(medications: Array<{ drugName: string; active: boolean }>): DrugInteraction[] {
+export function checkInteractions(
+  medications: Array<{ drugName: string; active: boolean }>
+): DrugInteraction[] {
   const activeMeds = medications.filter(m => m.active);
   const interactions: DrugInteraction[] = [];
-  const seen = new Set<string>();
 
   for (let i = 0; i < activeMeds.length; i++) {
     for (let j = i + 1; j < activeMeds.length; j++) {
-      const med1 = activeMeds[i].drugName.toLowerCase();
-      const med2 = activeMeds[j].drugName.toLowerCase();
+      const med1 = activeMeds[i].drugName;
+      const med2 = activeMeds[j].drugName;
 
       for (const rule of INTERACTION_RULES) {
-        const match1to2 = rule.patterns1.some(p => med1.includes(p)) && rule.patterns2.some(p => med2.includes(p));
-        const match2to1 = rule.patterns1.some(p => med2.includes(p)) && rule.patterns2.some(p => med1.includes(p));
+        const match1to2 = matchesDrug(med1, rule.patterns1) && matchesDrug(med2, rule.patterns2);
+        const match2to1 = matchesDrug(med1, rule.patterns2) && matchesDrug(med2, rule.patterns1);
 
         if (match1to2 || match2to1) {
-          const key = [activeMeds[i].drugName, activeMeds[j].drugName].sort().join("|");
-          if (!seen.has(key)) {
-            seen.add(key);
-            interactions.push({
-              drug1: activeMeds[i].drugName,
-              drug2: activeMeds[j].drugName,
-              severity: rule.severity,
-              effect: rule.effect,
-              recommendation: rule.recommendation,
-              mechanism: rule.mechanism,
-            });
-          }
+          interactions.push({
+            severity: rule.severity,
+            drug1: med1,
+            drug2: med2,
+            description: rule.description,
+            clinicalSignificance: rule.clinicalSignificance,
+            recommendation: rule.recommendation,
+          });
         }
       }
     }
   }
 
-  // Sort by severity
-  const order = { CRITICAL: 0, HIGH: 1, MODERATE: 2 };
-  interactions.sort((a, b) => order[a.severity] - order[b.severity]);
+  // Sort: critical > major > moderate
+  const severityOrder = { critical: 0, major: 1, moderate: 2 };
+  interactions.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
   return interactions;
 }

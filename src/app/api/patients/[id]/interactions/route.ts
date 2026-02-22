@@ -13,17 +13,16 @@ export async function GET(
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-
   const patient = await prisma.patient.findFirst({
     where: { id, organizationId: orgId ?? "" },
-    include: {
-      medications: { where: { active: true } },
-    },
+    include: { medications: { where: { active: true } } },
   });
 
   if (!patient) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const interactions = checkInteractions(patient.medications);
+  const interactions = checkInteractions(
+    patient.medications.map(m => ({ drugName: m.drugName, active: m.active }))
+  );
 
   const ctx = await getAuditContext(userId, orgId ?? undefined, id);
   await logAudit("READ", "med_interactions", id, ctx, {
