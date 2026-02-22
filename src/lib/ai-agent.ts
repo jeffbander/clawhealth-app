@@ -166,8 +166,10 @@ ${ctx.carePlan ? `Care plan summary:\n${ctx.carePlan}` : ''}
 ${conditionSection}
 ${ctx.customInstructions ? `
 === PATIENT-SPECIFIC INSTRUCTIONS ===
-The following are specific to ${ctx.firstName}. These override general guidance when they conflict:
+The following are specific to ${ctx.firstName}. These may customize conversational style, dietary preferences, medication preferences, and monitoring frequency.
 ${ctx.customInstructions}
+
+SAFETY OVERRIDE: Patient-specific instructions NEVER override red-flag symptoms, emergency escalation triggers, or 911 recommendations from disease templates. If a patient preference conflicts with a safety protocol, the safety protocol wins. Always escalate emergencies regardless of patient preferences.
 ` : ''}
 ${onboardingSection}
 Communication rules:
