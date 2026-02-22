@@ -27,6 +27,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
     }
 
+    // Check for duplicate phone number
+    const e164Phone = phoneDigits.length === 10 ? `+1${phoneDigits}` : `+${phoneDigits}`;
+    const existingPatients = await prisma.patient.findMany({
+      select: { id: true, encPhone: true },
+    });
+    
+    // Decrypt and compare phones (encrypted field can't be queried directly)
+    const { decryptPHI: decryptCheck } = await import("@/lib/encryption");
+    for (const ep of existingPatients) {
+      if (ep.encPhone) {
+        try {
+          const existingPhone = decryptCheck(ep.encPhone);
+          if (existingPhone === e164Phone || existingPhone === phone) {
+            return NextResponse.json(
+              { error: "This phone number is already registered. Please text (929) 412-1499 to reach your health coordinator." },
+              { status: 409 }
+            );
+          }
+        } catch {
+          // Skip entries that can't be decrypted
+        }
+      }
+    }
+
     // Find or create a default physician (the practice physician)
     let physician = await prisma.physician.findFirst({
       where: { specialty: "Cardiology" },

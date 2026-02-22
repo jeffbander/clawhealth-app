@@ -19,6 +19,25 @@ import {
   lockPatientAccount,
 } from "@/lib/physician-alert";
 
+// ─── Rate Limiting (in-memory, per-phone) ────────────────────────────────────
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 10;      // messages per window
+const RATE_LIMIT_WINDOW = 300000; // 5 minutes in ms
+
+function isRateLimited(phone: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(phone);
+  
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(phone, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return false;
+  }
+  
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) return true;
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   // Parse form-encoded Twilio webhook body
   const formData = await req.formData();
@@ -39,6 +58,17 @@ export async function POST(req: NextRequest) {
   if (signature && !validateTwilioWebhook(signature, webhookUrl, params)) {
     console.error("[TWILIO_SMS] Invalid signature for URL:", webhookUrl);
     // Log but don't block — URL mismatch is common during setup
+  }
+
+  // Rate limiting
+  if (isRateLimited(from)) {
+    const twiml = messagingTwiml();
+    twiml.message(
+      "You're sending messages too quickly. Please wait a few minutes and try again. For emergencies, call 911."
+    );
+    return new NextResponse(twiml.toString(), {
+      headers: { "Content-Type": "text/xml" },
+    });
   }
 
   // Find patient by phone number
