@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import PatientInstructions from "./PatientInstructions";
 import PhysicianActions from "./PhysicianActions";
+import PatientTimeline from "./PatientTimeline";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -293,6 +294,9 @@ export default async function PatientDetailPage({
 
       {/* AI Instructions */}
       <PatientInstructions patientId={id} />
+
+      {/* Patient Timeline */}
+      <PatientTimeline patientId={id} />
 
       {/* Conversation History — Chat Style */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
