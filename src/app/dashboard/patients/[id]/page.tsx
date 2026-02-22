@@ -9,6 +9,7 @@ import Link from "next/link";
 import PatientInstructions from "./PatientInstructions";
 import PhysicianActions from "./PhysicianActions";
 import PatientTimeline from "./PatientTimeline";
+import MedInteractions from "./MedInteractions";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -291,6 +292,9 @@ export default async function PatientDetailPage({
           message: a.message,
         }))}
       />
+
+      {/* Medication Interactions */}
+      <MedInteractions patientId={id} />
 
       {/* AI Instructions */}
       <PatientInstructions patientId={id} />
