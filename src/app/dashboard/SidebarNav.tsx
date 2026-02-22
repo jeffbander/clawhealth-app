@@ -89,15 +89,15 @@ export function SidebarNav({ links }: { links: NavLink[] }) {
               transition-all duration-150 no-underline group
               ${
                 isActive
-                  ? "bg-white/[0.14] text-white"
-                  : "text-white/70 hover:bg-white/[0.08] hover:text-white"
+                  ? "bg-white/[0.15] text-white"
+                  : "text-white/90 hover:bg-white/[0.08] hover:text-white"
               }
             `}
           >
             {isActive && (
               <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-[#06ABEB]" />
             )}
-            <span className={`w-5 flex items-center justify-center flex-shrink-0 transition-opacity ${isActive ? "opacity-100" : "opacity-70 group-hover:opacity-100"}`}>
+            <span className={`w-5 flex items-center justify-center flex-shrink-0 transition-opacity ${isActive ? "opacity-100" : "opacity-80 group-hover:opacity-100"}`}>
               {ICONS[link.icon] ?? <span className="text-sm">•</span>}
             </span>
             <span className="tracking-[-0.01em]">{link.label}</span>
