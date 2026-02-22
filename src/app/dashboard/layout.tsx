@@ -6,14 +6,14 @@ import Link from "next/link";
 import { SidebarNav } from "./SidebarNav";
 
 const navLinks = [
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
-  { href: "/dashboard/patients", label: "Patients", icon: "👥" },
-  { href: "/dashboard/inbox", label: "Inbox", icon: "✉️" },
-  { href: "/dashboard/patients/onboard", label: "Onboard Patient", icon: "📋" },
-  { href: "/dashboard/alerts", label: "Alerts", icon: "🔔" },
-  { href: "/dashboard/care-plans", label: "Care Plans", icon: "📝" },
-  { href: "/dashboard/analytics", label: "Analytics", icon: "📈" },
-  { href: "/dashboard/settings", label: "Settings", icon: "⚙️" },
+  { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
+  { href: "/dashboard/patients", label: "Patients", icon: "patients" },
+  { href: "/dashboard/inbox", label: "Inbox", icon: "inbox" },
+  { href: "/dashboard/patients/onboard", label: "Onboard", icon: "onboard" },
+  { href: "/dashboard/alerts", label: "Alerts", icon: "alerts" },
+  { href: "/dashboard/care-plans", label: "Care Plans", icon: "careplans" },
+  { href: "/dashboard/analytics", label: "Analytics", icon: "analytics" },
+  { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
 export default async function DashboardLayout({
