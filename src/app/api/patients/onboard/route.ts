@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { encryptPHI } from "@/lib/encryption";
 import { logAudit, getAuditContext } from "@/lib/audit";
+import { sendSMS } from "@/lib/twilio";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -178,6 +179,28 @@ If a field is not found in the text, use empty string or empty array. Never fabr
     })
   } catch {
     // Non-blocking — memory files are supplementary to DB
+  }
+
+  // Send welcome SMS if phone number was parsed from EMR
+  if (parsed.phone) {
+    try {
+      await sendSMS(
+        parsed.phone,
+        `Welcome to ClawHealth, ${parsed.firstName}! 🏥 I'm your AI health coordinator, working with your cardiologist at Mount Sinai.\n\nYou can text me anytime about:\n💊 Medications\n📊 Symptoms & vitals\n❓ Health questions\n\nText HELP for assistance or STOP to opt out.\n\nLet's start: how are you feeling today?`
+      );
+      await prisma.conversation.create({
+        data: {
+          patientId: patient.id,
+          role: "AI",
+          encContent: encryptPHI(
+            `Welcome to ClawHealth, ${parsed.firstName}! I'm your AI health coordinator. You can text me anytime about medications, symptoms, or health questions.`
+          ),
+          audioUrl: `twilio://sms/welcome`,
+        },
+      });
+    } catch {
+      // SMS failure shouldn't block onboarding — patient record is already created
+    }
   }
 
   // Audit log
