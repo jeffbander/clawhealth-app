@@ -116,11 +116,24 @@ tests/
 | `AuditLog` | HIPAA-compliant audit trail |
 | `Physician` | Clerk user → physician mapping |
 
+## Databases
+
+| Environment | Branch | Host | Purpose |
+|-------------|--------|------|---------|
+| **Production** | `production` (br-restless-bread-aiqlp8x5) | ep-royal-art-aid9a4ko-pooler.c-4.us-east-1.aws.neon.tech | Live app.clawmd.ai |
+| **Development** | `development` (br-flat-snow-aingy0ft) | ep-lingering-cloud-aicwa3gr-pooler.c-4.us-east-1.aws.neon.tech | Local dev (npm run dev) |
+
+Both are on **Neon project `clawhealth`** (fragrant-snow-58391828), org `org-lingering-paper-38685569`.
+Dev branch is copy-on-write from production — isolated but starts with same data.
+
+**Neon Console**: console.neon.tech (jeffrey.bander@gmail.com)
+**Neon API Key**: Stored in `~/clawd/tools/api-key-manager/` (name: clawhealth-albert)
+
 ## Environment Variables
 
 ### Required (Production)
 ```
-DATABASE_URL          # Neon Postgres connection string
+DATABASE_URL          # Neon Postgres connection string (production branch)
 DIRECT_URL            # Neon direct connection (for migrations)
 ENCRYPTION_KEY        # 32-byte hex key for AES-256-GCM PHI encryption
 ANTHROPIC_API_KEY     # Claude API key
@@ -146,11 +159,14 @@ NEXT_PUBLIC_APP_URL      # https://app.clawmd.ai
 ### Run locally
 ```bash
 npm install
-npx vercel env pull .env.local   # Pull dev env vars
 npx prisma generate
-npx prisma db push               # Sync schema to dev DB
 npm run dev                       # http://localhost:3000
 ```
+
+`.env.local` is already configured with the dev database branch. Do NOT run `vercel env pull` — it would overwrite with production credentials.
+
+**Local → dev DB** (ep-lingering-cloud-aicwa3gr)
+**Vercel → prod DB** (ep-royal-art-aid9a4ko)
 
 ### Seed demo data
 ```bash

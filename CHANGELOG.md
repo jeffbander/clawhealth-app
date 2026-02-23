@@ -8,7 +8,26 @@ All notable changes to ClawHealth, documented chronologically.
 
 ---
 
-## [2026-02-22] NanoClaw Patient Memory + Documentation
+## [2026-02-22] NanoClaw Patient Memory + Documentation + Dev Database
+
+### Added
+- **Separate dev database** — Neon branch `development` (br-flat-snow-aingy0ft)
+  - Production: `ep-royal-art-aid9a4ko-pooler` (Vercel)
+  - Development: `ep-lingering-cloud-aicwa3gr-pooler` (local `npm run dev`)
+  - Copy-on-write from production — isolated but starts with same data
+  - `.env.local` points to dev branch; Vercel env vars point to production
+- **Neon API key** created (`clawhealth-albert`) for CLI/API access
+- **neonctl** installed globally for database management
+- **SMS error handling** — graceful fallback when AI agent errors
+
+### Performance
+- Attempted Haiku model for faster SMS (~2s) — **reverted** due to model ID issues
+- Added parallelized DB queries in AI agent (patient context + conversation history)
+- SMS responses: ~5-8s on Sonnet (stable)
+
+---
+
+## [2026-02-22] NanoClaw Patient Memory + Documentation (earlier)
 
 ### Added
 - **NanoClaw Patient Memory Layer** (`src/lib/patient-memory.ts`)
@@ -228,7 +247,7 @@ All notable changes to ClawHealth, documented chronologically.
 | Service | Purpose | Dashboard |
 |---------|---------|-----------|
 | Vercel | Hosting + crons | vercel.com/jeff-banders-projects/clawhealth-app |
-| Neon | PostgreSQL | console.neon.tech |
+| Neon | PostgreSQL (prod + dev branches) | console.neon.tech (project: fragrant-snow-58391828) |
 | Clerk | Authentication | dashboard.clerk.com (instance ins_37TuDBxwDJpQWZaPK94QrUbnJde) |
 | Twilio | SMS/Voice | console.twilio.com (SID in env vars) |
 | Vercel Blob | NanoClaw memory | store_T54oG026q2eR7BMN |
