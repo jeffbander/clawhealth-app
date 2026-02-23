@@ -143,7 +143,12 @@ Do NOT dump all of this in one message. Have a natural back-and-forth conversati
 ` : ''
 
   // Load NanoClaw memory files (SOUL.md, MEMORY.md, daily logs)
-  const memoryContext = await loadMemoryContext(patientId)
+  let memoryContext: string | null = null
+  try {
+    memoryContext = await loadMemoryContext(patientId)
+  } catch {
+    // Memory is supplementary — never block patient response
+  }
 
   return `You are ${ctx.firstName}'s personal AI health coordinator at ClawHealth.
 You work under the supervision of their cardiologist at Mount Sinai West.
@@ -232,7 +237,7 @@ async function extractAndStoreInsights(
 ): Promise<void> {
   try {
     const completion = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
       system: `You are a clinical data extractor. From the patient message and AI response, extract any clinically relevant insights. Return a JSON object with:
 - "insights": array of short factual statements (e.g. "Patient reports ankle swelling since Tuesday", "Patient confirmed taking Lisinopril daily")  
@@ -362,10 +367,10 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
     { role: 'user' as const, content: userMessage }
   ]
 
-  // Haiku for routine messages (~2s), Sonnet for escalations (~5s)
+  // Haiku for routine messages (~1-2s), Sonnet for escalations (~5s)
   const model = requiresEscalation
     ? 'claude-sonnet-4-5-20250929'
-    : 'claude-3-5-haiku-20241022'
+    : 'claude-haiku-4-5-20251001'
 
   const completion = await anthropic.messages.create({
     model,
