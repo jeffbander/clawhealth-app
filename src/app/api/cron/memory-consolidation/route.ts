@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   try {
     // Get all active patients
     const patients = await prisma.patient.findMany({
-      where: { active: true },
+      where: { agentEnabled: true },
       select: { id: true }
     })
 
