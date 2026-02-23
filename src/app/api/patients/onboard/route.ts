@@ -168,6 +168,18 @@ If a field is not found in the text, use empty string or empty array. Never fabr
     },
   });
 
+  // Initialize NanoClaw patient memory (SOUL.md + MEMORY.md)
+  try {
+    const { initializePatientMemory } = await import('@/lib/patient-memory')
+    await initializePatientMemory(patient.id, {
+      name: parsed.firstName,
+      conditions: parsed.conditions,
+      communicationStyle: 'Warm, supportive, plain language appropriate for SMS. 2-4 sentences max.',
+    })
+  } catch {
+    // Non-blocking — memory files are supplementary to DB
+  }
+
   // Audit log
   const ctx = await getAuditContext(userId, orgId ?? undefined, patient.id);
   await logAudit("CREATE", "patient", patient.id, ctx, {
