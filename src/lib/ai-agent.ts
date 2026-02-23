@@ -237,7 +237,7 @@ async function extractAndStoreInsights(
 ): Promise<void> {
   try {
     const completion = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 256,
       system: `You are a clinical data extractor. From the patient message and AI response, extract any clinically relevant insights. Return a JSON object with:
 - "insights": array of short factual statements (e.g. "Patient reports ankle swelling since Tuesday", "Patient confirmed taking Lisinopril daily")  
@@ -367,10 +367,8 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
     { role: 'user' as const, content: userMessage }
   ]
 
-  // Haiku for routine messages (~1-2s), Sonnet for escalations (~5s)
-  const model = requiresEscalation
-    ? 'claude-sonnet-4-5-20250929'
-    : 'claude-haiku-4-5-20251001'
+  // TODO: Haiku for routine, Sonnet for escalations — reverted pending model ID debugging
+  const model = 'claude-sonnet-4-5-20250929'
 
   const completion = await anthropic.messages.create({
     model,
