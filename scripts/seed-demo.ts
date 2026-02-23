@@ -26,7 +26,7 @@ const ORG_ID = "org_demo";
 const PATIENTS = [
   {
     firstName: "Mary", lastName: "Johnson", dob: "1958-03-22", mrn: "MSW-2024-001847",
-    phone: "(212) 555-0147", email: "mary.j@gmail.com",
+    phone: "(646) 556-5559", email: "mary.j@gmail.com",
     address: "425 West 59th Street, Apt 12B, New York, NY 10019",
     riskLevel: "CRITICAL", primaryDx: "I50.9",
     conditions: ["Heart Failure", "Type 2 Diabetes", "Hypertension", "Chronic Kidney Disease"],

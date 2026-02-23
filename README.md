@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ClawHealth
 
-## Getting Started
+AI-powered patient care coordination for cardiology. HIPAA-compliant.
 
-First, run the development server:
+**Live**: [app.clawmd.ai](https://app.clawmd.ai) | **Marketing**: [clawmd.ai](https://clawmd.ai)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## What It Does
+
+Patients text a phone number → an AI agent responds with personalized clinical guidance → physicians monitor and intervene from a dashboard.
+
+```
+Patient (SMS) ──→ Twilio ──→ AI Agent (Claude) ──→ Response
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ↓               ↓               ↓
+               PostgreSQL     Vercel Blob     Telegram Alert
+            (clinical data)  (agent memory)   (physician)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### For Patients
+- Text **(929) 412-1499** for medication questions, symptom guidance, vital tracking
+- Self-enroll at [app.clawmd.ai/enroll](https://app.clawmd.ai/enroll)
+- Emergency keywords automatically alert your physician
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### For Physicians
+- Dashboard with patient list, risk levels, alerts
+- Unified inbox for patient messages
+- Resolve alerts with clinical notes
+- Message patients directly via SMS
+- Edit disease-specific AI templates
+- Per-patient AI instruction overrides
+- CCM billing tracking (CPT 99490/99439/99491)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Tech Stack
 
-## Learn More
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 14 (App Router, TypeScript) |
+| Styling | Tailwind CSS |
+| Auth | Clerk |
+| Database | PostgreSQL (Neon) via Prisma |
+| AI | Anthropic Claude Sonnet 4.5 |
+| SMS/Voice | Twilio |
+| Agent Memory | Vercel Blob (NanoClaw architecture) |
+| Encryption | AES-256-GCM (all PHI at rest) |
+| Hosting | Vercel |
+| Alerts | Telegram Bot API |
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Three-Tier Prompt System
+1. **Base prompt** — clinical safety rules, communication guidelines
+2. **Disease templates** — 18 condition-specific protocols (HF, AFib, CAD, HTN, CKD, COPD, etc.)
+3. **Patient overrides** — per-patient instructions set by physician
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### NanoClaw Patient Memory
+Each patient gets persistent memory files (OpenClaw-style):
+- `SOUL.md` — agent personality, communication preferences
+- `MEMORY.md` — accumulated behavioral knowledge, relationship context
+- `memory/YYYY-MM-DD.md` — daily interaction logs
 
-## Deploy on Vercel
+Structured data (vitals, meds, alerts, billing) stays in Postgres. Soft knowledge (preferences, behavioral patterns) lives in files. Nightly AI consolidation distills daily logs into long-term memory.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Safety
+- All PHI encrypted with AES-256-GCM
+- Emergency keyword detection → immediate physician alert
+- Auto-lock after 3 unresolved emergencies in 30 minutes
+- HIPAA audit logging on all data access
+- Prompt injection resistance tested and validated
+- No medical diagnoses — always refers to physician
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Quick Start
+
+```bash
+git clone https://github.com/jeffbander/clawhealth-app.git
+cd clawhealth-app
+npm install
+npx vercel env pull .env.local    # Or create .env.local manually
+npx prisma generate
+npx prisma db push
+npx tsx scripts/seed-demo.ts      # Seed 5 demo patients
+npm run dev                        # http://localhost:3000
+```
+
+See [CLAUDE.md](./CLAUDE.md) for detailed codebase documentation.
+
+## License
+
+Private. © 2026 ClawHealth.
