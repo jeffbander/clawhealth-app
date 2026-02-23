@@ -9,6 +9,7 @@ import { decryptPHI, decryptJSON, encryptPHI } from './encryption'
 import { getConditionPrompts, buildConditionPromptSection } from './condition-prompts'
 import { loadConditionTemplates, matchConditions, buildConditionSection } from './condition-prompts-db'
 import { checkInteractions, DrugInteraction } from './med-interactions'
+import { loadMemoryContext, logInteraction } from './patient-memory'
 
 const prisma = new PrismaClient()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -87,7 +88,7 @@ export async function loadPatientContext(patientId: string): Promise<PatientCont
  * Build HIPAA-safe system prompt for the patient agent
  * Uses decrypted context but produces a non-loggable prompt
  */
-async function buildSystemPrompt(ctx: PatientContext): Promise<string> {
+async function buildSystemPrompt(ctx: PatientContext, patientId: string): Promise<string> {
   const medList = ctx.medications.map(m =>
     `- ${m.drug} ${m.dose} ${m.frequency} (adherence: ${Math.round(m.adherenceRate)}%)`
   ).join('\n')
@@ -141,6 +142,9 @@ This is your first conversation with ${ctx.firstName}. Follow this sequence:
 Do NOT dump all of this in one message. Have a natural back-and-forth conversation.
 ` : ''
 
+  // Load NanoClaw memory files (SOUL.md, MEMORY.md, daily logs)
+  const memoryContext = await loadMemoryContext(patientId)
+
   return `You are ${ctx.firstName}'s personal AI health coordinator at ClawHealth.
 You work under the supervision of their cardiologist at Mount Sinai West.
 
@@ -172,6 +176,12 @@ ${ctx.customInstructions}
 SAFETY OVERRIDE: Patient-specific instructions NEVER override red-flag symptoms, emergency escalation triggers, or 911 recommendations from disease templates. If a patient preference conflicts with a safety protocol, the safety protocol wins. Always escalate emergencies regardless of patient preferences.
 ` : ''}
 ${onboardingSection}
+${memoryContext ? `
+=== AGENT MEMORY (NanoClaw) ===
+The following is your accumulated knowledge about this patient from past interactions.
+Use this to personalize your responses — reference things you've learned about them.
+${memoryContext}
+` : ''}
 Communication rules:
 1. NEVER provide specific medical diagnoses
 2. ALWAYS recommend contacting their physician for new or worsening symptoms
@@ -303,7 +313,7 @@ export async function generatePatientResponse(
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string }> {
   const ctx = await loadPatientContext(patientId)
-  const systemPrompt = await buildSystemPrompt(ctx)
+  const systemPrompt = await buildSystemPrompt(ctx, patientId)
 
   // Load conversation history from DB if not provided
   const history = conversationHistory?.length
@@ -364,6 +374,9 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
 
   // Fire-and-forget: extract insights from this interaction
   extractAndStoreInsights(patientId, userMessage, response, ctx).catch(() => {})
+
+  // Fire-and-forget: log to NanoClaw daily memory file
+  logInteraction(patientId, userMessage, response).catch(() => {})
 
   return { response, requiresEscalation, escalationReason }
 }
