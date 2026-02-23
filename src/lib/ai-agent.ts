@@ -232,7 +232,7 @@ async function extractAndStoreInsights(
 ): Promise<void> {
   try {
     const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-haiku-3-5-20241022',
       max_tokens: 256,
       system: `You are a clinical data extractor. From the patient message and AI response, extract any clinically relevant insights. Return a JSON object with:
 - "insights": array of short factual statements (e.g. "Patient reports ankle swelling since Tuesday", "Patient confirmed taking Lisinopril daily")  
@@ -312,13 +312,14 @@ export async function generatePatientResponse(
   userMessage: string,
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
 ): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string }> {
-  const ctx = await loadPatientContext(patientId)
+  // Parallelize: load patient context + conversation history simultaneously
+  const [ctx, history] = await Promise.all([
+    loadPatientContext(patientId),
+    conversationHistory?.length
+      ? Promise.resolve(conversationHistory)
+      : loadConversationHistory(patientId)
+  ])
   const systemPrompt = await buildSystemPrompt(ctx, patientId)
-
-  // Load conversation history from DB if not provided
-  const history = conversationHistory?.length
-    ? conversationHistory
-    : await loadConversationHistory(patientId)
 
   // Proactive outreach mode — generate a friendly check-in message
   if (userMessage === '__PROACTIVE_OUTREACH__') {
@@ -361,8 +362,13 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
     { role: 'user' as const, content: userMessage }
   ]
 
+  // Haiku for routine messages (~2s), Sonnet for escalations (~5s)
+  const model = requiresEscalation
+    ? 'claude-sonnet-4-5-20250929'
+    : 'claude-haiku-3-5-20241022'
+
   const completion = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
+    model,
     max_tokens: 512,
     system: systemPrompt,
     messages
