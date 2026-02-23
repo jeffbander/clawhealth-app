@@ -10,6 +10,7 @@ import PatientInstructions from "./PatientInstructions";
 import PhysicianActions from "./PhysicianActions";
 import PatientTimeline from "./PatientTimeline";
 import MedInteractions from "./MedInteractions";
+import PatientDemographics from "./PatientDemographics";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -58,6 +59,8 @@ export default async function PatientDetailPage({
   const { id } = await params;
   const { userId, orgId } = await auth();
   if (!userId) return null;
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
   const [patient, ccmStatus] = await Promise.all([
     prisma.patient.findFirst({
@@ -65,7 +68,7 @@ export default async function PatientDetailPage({
       include: {
         medications: { where: { active: true }, orderBy: { startDate: "desc" } },
         vitals: {
-          where: { recordedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+          where: { recordedAt: { gte: sevenDaysAgo } },
           orderBy: { recordedAt: "desc" },
         },
         conversations: { orderBy: { createdAt: "desc" }, take: 20 },
@@ -83,9 +86,17 @@ export default async function PatientDetailPage({
 
   let firstName = "Patient";
   let lastName = "";
+  let phone = "";
+  let email = "";
+  let dateOfBirth = "";
+  let address = "";
   let conditions: string[] = [];
   try { firstName = decryptPHI(patient.encFirstName); } catch {}
   try { lastName = decryptPHI(patient.encLastName); } catch {}
+  try { phone = patient.encPhone ? decryptPHI(patient.encPhone) : ""; } catch {}
+  try { email = patient.encEmail ? decryptPHI(patient.encEmail) : ""; } catch {}
+  try { dateOfBirth = decryptPHI(patient.encDateOfBirth); } catch {}
+  try { address = patient.encAddress ? decryptPHI(patient.encAddress) : ""; } catch {}
   try { conditions = decryptJSON<string[]>(patient.encConditions); } catch {}
 
   const vitals = patient.vitals.map((v) => {
@@ -191,6 +202,18 @@ export default async function PatientDetailPage({
           )}
         </div>
       </div>
+
+      <PatientDemographics
+        patientId={id}
+        initialData={{
+          firstName,
+          lastName,
+          phone,
+          email,
+          dateOfBirth,
+          address,
+        }}
+      />
 
       {/* Grid: Meds + Vitals */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
