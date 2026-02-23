@@ -99,8 +99,18 @@ export async function POST(req: NextRequest) {
   await storeConversation(patient.id, "PATIENT", body, `twilio://sms/${messageSid}`);
 
   // Generate AI response — history loaded from DB automatically
-  const { response, requiresEscalation, escalationReason } =
-    await generatePatientResponse(patient.id, body);
+  let response: string;
+  let requiresEscalation = false;
+  let escalationReason: string | undefined;
+  try {
+    const result = await generatePatientResponse(patient.id, body);
+    response = result.response;
+    requiresEscalation = result.requiresEscalation;
+    escalationReason = result.escalationReason;
+  } catch (err) {
+    console.error("[TWILIO_SMS] AI agent error:", err instanceof Error ? err.message : err);
+    response = "I'm having a brief technical issue. Your message was received — please try again in a moment, or contact your care team directly for urgent needs.";
+  }
 
   // Store AI response (encrypted)
   await storeConversation(patient.id, "AI", response, `twilio://sms/${messageSid}/reply`);
