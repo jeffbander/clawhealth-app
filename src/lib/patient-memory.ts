@@ -4,34 +4,76 @@
  * Per-patient memory files (OpenClaw-style) for soft context that
  * doesn't fit in structured DB columns:
  * 
- * patients/<id>/
- *   SOUL.md        — agent personality, condition context, communication preferences
- *   MEMORY.md      — accumulated relationship knowledge, behavioral patterns
- *   memory/
- *     YYYY-MM-DD.md — daily interaction logs, raw observations
+ * patients/<id>/SOUL.md        — agent personality, condition context, communication preferences
+ * patients/<id>/MEMORY.md      — accumulated relationship knowledge, behavioral patterns  
+ * patients/<id>/memory/YYYY-MM-DD.md — daily interaction logs, raw observations
+ * 
+ * Storage: Vercel Blob (persistent, serverless-compatible)
+ * Fallback: Local filesystem (dev mode when BLOB_READ_WRITE_TOKEN not set)
  * 
  * DB handles: vitals, meds, alerts, billing, conversations (structured, queryable)
  * Files handle: agent reasoning, relationship context, soft knowledge (personality)
  */
 
-import { promises as fs } from 'fs'
-import path from 'path'
-import { decryptPHI, encryptPHI } from './encryption'
+import { put, head, list } from '@vercel/blob'
+import Anthropic from '@anthropic-ai/sdk'
 
-// In production, store encrypted on disk or in blob storage
-// For now, use local filesystem (Vercel: use Vercel Blob or KV)
-const MEMORY_ROOT = process.env.PATIENT_MEMORY_ROOT || '/tmp/clawhealth-patients'
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-function patientDir(patientId: string): string {
-  return path.join(MEMORY_ROOT, patientId)
+const PREFIX = 'nanoclaw/patients'
+const useBlob = !!process.env.BLOB_READ_WRITE_TOKEN
+
+// ─── Blob Storage Helpers ──────────────────────────────────
+
+function blobPath(patientId: string, file: string): string {
+  return `${PREFIX}/${patientId}/${file}`
 }
 
-/**
- * Ensure patient directory structure exists
- */
-async function ensurePatientDir(patientId: string): Promise<void> {
-  const dir = patientDir(patientId)
-  await fs.mkdir(path.join(dir, 'memory'), { recursive: true })
+async function readFile(patientId: string, file: string): Promise<string | null> {
+  if (!useBlob) return readFileLocal(patientId, file)
+  try {
+    const blob = await head(blobPath(patientId, file))
+    if (!blob) return null
+    const res = await fetch(blob.url)
+    return res.ok ? await res.text() : null
+  } catch {
+    return null
+  }
+}
+
+async function writeFile(patientId: string, file: string, content: string): Promise<void> {
+  if (!useBlob) return writeFileLocal(patientId, file, content)
+  await put(blobPath(patientId, file), content, {
+    access: 'public', // URLs are unguessable; content is non-PHI soft context
+    addRandomSuffix: false,
+    contentType: 'text/markdown',
+  })
+}
+
+async function appendFile(patientId: string, file: string, append: string): Promise<void> {
+  const existing = await readFile(patientId, file) || ''
+  await writeFile(patientId, file, existing + append)
+}
+
+// ─── Local Filesystem Fallback (dev) ───────────────────────
+
+import { promises as fs } from 'fs'
+import path from 'path'
+
+const LOCAL_ROOT = process.env.PATIENT_MEMORY_ROOT || '/tmp/clawhealth-patients'
+
+async function readFileLocal(patientId: string, file: string): Promise<string | null> {
+  try {
+    return await fs.readFile(path.join(LOCAL_ROOT, patientId, file), 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+async function writeFileLocal(patientId: string, file: string, content: string): Promise<void> {
+  const filepath = path.join(LOCAL_ROOT, patientId, file)
+  await fs.mkdir(path.dirname(filepath), { recursive: true })
+  await fs.writeFile(filepath, content, 'utf-8')
 }
 
 // ─── SOUL.md ───────────────────────────────────────────────
@@ -42,14 +84,11 @@ export interface PatientSoul {
   communicationStyle: string
   preferredCheckInTime?: string
   language?: string
-  personalContext?: string   // "lives alone", "caregiver is daughter"
-  clinicalNotes?: string     // physician-provided context
-  doNotMention?: string[]    // sensitive topics to avoid
+  personalContext?: string
+  clinicalNotes?: string
+  doNotMention?: string[]
 }
 
-/**
- * Generate initial SOUL.md from patient enrollment data
- */
 export function generateSoulTemplate(soul: PatientSoul): string {
   return `# SOUL.md — ${soul.name}'s Care Agent
 
@@ -74,16 +113,11 @@ ${soul.doNotMention?.length ? `## Sensitive Topics (avoid unless patient raises)
 }
 
 export async function readSoul(patientId: string): Promise<string | null> {
-  try {
-    return await fs.readFile(path.join(patientDir(patientId), 'SOUL.md'), 'utf-8')
-  } catch {
-    return null
-  }
+  return readFile(patientId, 'SOUL.md')
 }
 
 export async function writeSoul(patientId: string, content: string): Promise<void> {
-  await ensurePatientDir(patientId)
-  await fs.writeFile(path.join(patientDir(patientId), 'SOUL.md'), content, 'utf-8')
+  return writeFile(patientId, 'SOUL.md', content)
 }
 
 // ─── MEMORY.md ─────────────────────────────────────────────
@@ -112,70 +146,42 @@ export function generateMemoryTemplate(name: string): string {
 }
 
 export async function readMemory(patientId: string): Promise<string | null> {
-  try {
-    return await fs.readFile(path.join(patientDir(patientId), 'MEMORY.md'), 'utf-8')
-  } catch {
-    return null
-  }
+  return readFile(patientId, 'MEMORY.md')
 }
 
 export async function writeMemory(patientId: string, content: string): Promise<void> {
-  await ensurePatientDir(patientId)
-  await fs.writeFile(path.join(patientDir(patientId), 'MEMORY.md'), content, 'utf-8')
+  return writeFile(patientId, 'MEMORY.md', content)
 }
 
 // ─── Daily Logs ────────────────────────────────────────────
 
-function todayFile(): string {
-  return new Date().toISOString().split('T')[0] + '.md'
+function todayStr(): string {
+  return new Date().toISOString().split('T')[0]
 }
 
 export async function readDailyLog(patientId: string, date?: string): Promise<string | null> {
-  const filename = date ? `${date}.md` : todayFile()
-  try {
-    return await fs.readFile(
-      path.join(patientDir(patientId), 'memory', filename),
-      'utf-8'
-    )
-  } catch {
-    return null
-  }
+  return readFile(patientId, `memory/${date || todayStr()}.md`)
 }
 
-export async function appendDailyLog(
-  patientId: string,
-  entry: string
-): Promise<void> {
-  await ensurePatientDir(patientId)
-  const filepath = path.join(patientDir(patientId), 'memory', todayFile())
+export async function appendDailyLog(patientId: string, entry: string): Promise<void> {
+  const date = todayStr()
+  const file = `memory/${date}.md`
+  const existing = await readFile(patientId, file)
 
-  let existing = ''
-  try {
-    existing = await fs.readFile(filepath, 'utf-8')
-  } catch {
-    existing = `# ${new Date().toISOString().split('T')[0]} — Daily Log\n\n`
-  }
-
+  const header = existing || `# ${date} — Daily Log\n\n`
   const timestamp = new Date().toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/New_York'
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York'
   })
 
-  await fs.writeFile(filepath, existing + `\n### ${timestamp}\n${entry}\n`, 'utf-8')
+  await writeFile(patientId, file, header + `\n### ${timestamp}\n${entry}\n`)
 }
 
 // ─── Initialize Patient Memory ────────────────────────────
 
-/**
- * Create initial memory structure for a new patient
- * Called during enrollment / onboarding
- */
 export async function initializePatientMemory(
   patientId: string,
   soul: PatientSoul
 ): Promise<void> {
-  await ensurePatientDir(patientId)
   await writeSoul(patientId, generateSoulTemplate(soul))
   await writeMemory(patientId, generateMemoryTemplate(soul.name))
   await appendDailyLog(patientId, `Patient memory initialized. Conditions: ${soul.conditions.join(', ')}`)
@@ -183,22 +189,16 @@ export async function initializePatientMemory(
 
 // ─── Load Memory Context for AI Agent ──────────────────────
 
-/**
- * Load all memory files into a single context string for the AI agent.
- * This gets injected into the system prompt alongside DB-sourced clinical data.
- * 
- * Loads: SOUL.md + MEMORY.md + today's daily log + yesterday's daily log
- */
 export async function loadMemoryContext(patientId: string): Promise<string | null> {
-  const soul = await readSoul(patientId)
-  const memory = await readMemory(patientId)
-  const todayLog = await readDailyLog(patientId)
+  const [soul, memory, todayLog] = await Promise.all([
+    readSoul(patientId),
+    readMemory(patientId),
+    readDailyLog(patientId),
+  ])
 
-  // Also load yesterday for continuity
   const yesterday = new Date()
   yesterday.setDate(yesterday.getDate() - 1)
-  const yesterdayStr = yesterday.toISOString().split('T')[0]
-  const yesterdayLog = await readDailyLog(patientId, yesterdayStr)
+  const yesterdayLog = await readDailyLog(patientId, yesterday.toISOString().split('T')[0])
 
   if (!soul && !memory) return null
 
@@ -213,12 +213,6 @@ export async function loadMemoryContext(patientId: string): Promise<string | nul
 
 // ─── Post-Interaction Memory Update ────────────────────────
 
-/**
- * After each conversation turn, log observations to daily file.
- * Periodically (or via cron), distill daily logs into MEMORY.md.
- * 
- * This runs fire-and-forget after the AI response — never blocks patient.
- */
 export async function logInteraction(
   patientId: string,
   patientMessage: string,
@@ -231,39 +225,18 @@ export async function logInteraction(
 ): Promise<void> {
   try {
     let entry = `**Patient**: "${patientMessage.slice(0, 200)}"\n**Agent**: "${aiResponse.slice(0, 200)}"`
-
-    if (insights?.moodOrConcern) {
-      entry += `\n**Mood/Concern**: ${insights.moodOrConcern}`
-    }
-    if (insights?.adherenceNote) {
-      entry += `\n**Adherence**: ${insights.adherenceNote}`
-    }
-    if (insights?.behavioralObservation) {
-      entry += `\n**Observation**: ${insights.behavioralObservation}`
-    }
-
+    if (insights?.moodOrConcern) entry += `\n**Mood/Concern**: ${insights.moodOrConcern}`
+    if (insights?.adherenceNote) entry += `\n**Adherence**: ${insights.adherenceNote}`
+    if (insights?.behavioralObservation) entry += `\n**Observation**: ${insights.behavioralObservation}`
     await appendDailyLog(patientId, entry)
   } catch {
-    // Best-effort — never block patient interaction
+    // Best-effort
   }
 }
 
 // ─── Memory Consolidation (Cron Job) ──────────────────────
 
-/**
- * Consolidate recent daily logs into MEMORY.md
- * Run via cron (e.g., nightly) — reads last 7 days of logs,
- * uses AI to distill patterns, updates MEMORY.md
- * 
- * TODO: Wire up to /api/cron/memory-consolidation
- */
-export async function consolidateMemory(
-  patientId: string,
-  _anthropicClient?: Anthropic
-): Promise<void> {
-  const client = _anthropicClient || anthropic
-
-  // Load last 7 days of logs
+export async function consolidateMemory(patientId: string): Promise<void> {
   const logs: string[] = []
   for (let i = 0; i < 7; i++) {
     const d = new Date()
@@ -276,17 +249,17 @@ export async function consolidateMemory(
 
   const currentMemory = await readMemory(patientId) || ''
 
-  const completion = await client.messages.create({
+  const completion = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
     max_tokens: 1024,
-    system: `You are a clinical memory curator for a patient's AI health agent. 
+    system: `You are a clinical memory curator for a patient's AI health agent.
 Given the current MEMORY.md and recent daily interaction logs, produce an updated MEMORY.md.
 
 Rules:
 - Keep the same section structure (Communication Patterns, Behavioral Observations, etc.)
 - Distill NEW patterns from the daily logs into the appropriate sections
-- Remove outdated observations that are contradicted by newer data
-- Keep it concise — this is curated knowledge, not raw logs
+- Remove outdated observations contradicted by newer data
+- Keep it concise — curated knowledge, not raw logs
 - Never include PHI identifiers (SSN, DOB, address) — only clinical context
 - Preserve important relationship moments and trust-building notes`,
     messages: [{
