@@ -9,7 +9,7 @@ import { decryptPHI, decryptJSON, encryptPHI } from './encryption'
 import { getConditionPrompts, buildConditionPromptSection } from './condition-prompts'
 import { loadConditionTemplates, matchConditions, buildConditionSection } from './condition-prompts-db'
 import { checkInteractions, DrugInteraction } from './med-interactions'
-import { loadMemoryContext, logInteraction } from './patient-memory'
+import { loadMemoryContext, logInteraction, readPatientMarkdownFile } from './patient-memory'
 
 const prisma = new PrismaClient()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -63,9 +63,18 @@ export async function loadPatientContext(patientId: string): Promise<PatientCont
     category: a.category
   }))
 
-  const carePlan = patient.carePlans[0]
+  let carePlan = patient.carePlans[0]
     ? decryptPHI(patient.carePlans[0].encContent)
     : undefined
+
+  try {
+    const carePlanMarkdown = await readPatientMarkdownFile(patientId, 'CarePlan.md')
+    if (carePlanMarkdown?.trim()) {
+      carePlan = carePlanMarkdown
+    }
+  } catch {
+    // Best effort: DB care plan remains fallback
+  }
 
   const customInstructions = patient.encCustomInstructions
     ? decryptPHI(patient.encCustomInstructions)

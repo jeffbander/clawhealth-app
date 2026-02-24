@@ -15,13 +15,23 @@
  * Files handle: agent reasoning, relationship context, soft knowledge (personality)
  */
 
-import { put, head, list } from '@vercel/blob'
+import { put, head } from '@vercel/blob'
 import Anthropic from '@anthropic-ai/sdk'
+import { buildCarePlanTemplateSection } from '@/lib/disease-templates'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const PREFIX = 'nanoclaw/patients'
 const useBlob = !!process.env.BLOB_READ_WRITE_TOKEN
+
+export const PATIENT_MARKDOWN_FILES = [
+  'CarePlan.md',
+  'Labs.md',
+  'MedicalHistory.md',
+  'Trends.md',
+] as const
+
+export type PatientMarkdownFile = typeof PATIENT_MARKDOWN_FILES[number]
 
 // ─── Blob Storage Helpers ──────────────────────────────────
 
@@ -305,6 +315,155 @@ export async function writeMemory(patientId: string, content: string): Promise<v
   return writeFile(patientId, 'MEMORY.md', content)
 }
 
+// ─── Persistent Patient Markdown Files ────────────────────
+
+function currentDateString(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+function carePlanTemplate(name: string, conditions: string[], medicalSummary?: string, templateSection?: string): string {
+  return `# CarePlan.md — ${name}
+*Authoritative longitudinal care plan. Last updated: ${currentDateString()}*
+
+## Current Snapshot
+${medicalSummary || 'Initial plan pending physician review.'}
+
+## Active Conditions
+${conditions.length > 0 ? conditions.map((condition) => `- ${condition}`).join('\n') : '- None documented'}
+
+## Plan Items
+- [ ] Confirm medication reconciliation at next check-in
+- [ ] Reinforce symptom monitoring and escalation guidance
+- [ ] Review goals with supervising physician
+
+## Notes
+- CarePlan.md is the authoritative plan source for this patient.
+
+${templateSection || ''}
+`
+}
+
+function labsTemplate(name: string): string {
+  return `# Labs.md — ${name}
+*Rolling lab updates. Keep newest entries at top; max 10 entries.*
+
+## Latest Labs
+- [${currentDateString()}] Initial baseline pending import
+`
+}
+
+function medicalHistoryTemplate(name: string, conditions: string[]): string {
+  return `# MedicalHistory.md — ${name}
+*Longitudinal conditions, procedures, and notable history.*
+
+## Conditions
+${conditions.length > 0 ? conditions.map((condition) => `- ${condition}`).join('\n') : '- None documented'}
+
+## Procedures
+- None documented
+
+## Additional Notes
+- Initial history created from onboarding data
+`
+}
+
+function trendsTemplate(name: string): string {
+  return `# Trends.md — ${name}
+*Track trajectory for vitals and symptoms over time.*
+
+## Weight Trend
+- ${currentDateString()}: No baseline trend documented
+
+## Blood Pressure Trend
+- ${currentDateString()}: No baseline trend documented
+
+## Symptom Trend
+- ${currentDateString()}: No baseline trend documented
+`
+}
+
+export async function readPatientMarkdownFile(
+  patientId: string,
+  file: PatientMarkdownFile
+): Promise<string | null> {
+  return readFile(patientId, file)
+}
+
+export async function writePatientMarkdownFile(
+  patientId: string,
+  file: PatientMarkdownFile,
+  content: string
+): Promise<void> {
+  return writeFile(patientId, file, content)
+}
+
+export async function readAllPatientMarkdownFiles(patientId: string): Promise<Record<PatientMarkdownFile, string>> {
+  const [carePlan, labs, history, trends] = await Promise.all([
+    readPatientMarkdownFile(patientId, 'CarePlan.md'),
+    readPatientMarkdownFile(patientId, 'Labs.md'),
+    readPatientMarkdownFile(patientId, 'MedicalHistory.md'),
+    readPatientMarkdownFile(patientId, 'Trends.md'),
+  ])
+
+  return {
+    'CarePlan.md': carePlan ?? '',
+    'Labs.md': labs ?? '',
+    'MedicalHistory.md': history ?? '',
+    'Trends.md': trends ?? '',
+  }
+}
+
+export async function initializePatientMarkdownFiles(
+  patientId: string,
+  input: {
+    name: string
+    conditions: string[]
+    medicalSummary?: string
+  }
+): Promise<void> {
+  const existing = await readAllPatientMarkdownFiles(patientId)
+  const templateSection = await buildCarePlanTemplateSection(input.conditions)
+
+  if (!existing['CarePlan.md']) {
+    await writePatientMarkdownFile(
+      patientId,
+      'CarePlan.md',
+      carePlanTemplate(input.name, input.conditions, input.medicalSummary, templateSection)
+    )
+  }
+  if (!existing['Labs.md']) {
+    await writePatientMarkdownFile(patientId, 'Labs.md', labsTemplate(input.name))
+  }
+  if (!existing['MedicalHistory.md']) {
+    await writePatientMarkdownFile(
+      patientId,
+      'MedicalHistory.md',
+      medicalHistoryTemplate(input.name, input.conditions)
+    )
+  }
+  if (!existing['Trends.md']) {
+    await writePatientMarkdownFile(patientId, 'Trends.md', trendsTemplate(input.name))
+  }
+}
+
+export async function appendMemorySummary(patientId: string, summary: string): Promise<void> {
+  const trimmed = summary.trim()
+  if (!trimmed) return
+
+  const current = await readMemory(patientId)
+  if (!current) return
+
+  const heading = '## 🆕 EMR Update Summary'
+  const entry = `\n- ${currentDateString()}: ${trimmed}`
+
+  if (current.includes(heading)) {
+    await writeMemory(patientId, `${current}${entry}`)
+    return
+  }
+
+  await writeMemory(patientId, `${current}\n\n${heading}${entry}\n`)
+}
+
 // ─── Daily Logs ────────────────────────────────────────────
 
 function todayStr(): string {
@@ -336,6 +495,10 @@ export async function initializePatientMemory(
 ): Promise<void> {
   await writeSoul(patientId, generateSoulTemplate(soul))
   await writeMemory(patientId, generateMemoryTemplate(soul.name))
+  await initializePatientMarkdownFiles(patientId, {
+    name: soul.name,
+    conditions: soul.conditions,
+  })
   await appendDailyLog(patientId, `Patient memory initialized. Conditions: ${soul.conditions.join(', ')}`)
 }
 

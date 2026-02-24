@@ -114,6 +114,16 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuditContext(userId, orgId ?? undefined, patient.id);
   await logAudit("CREATE", "patient", patient.id, ctx);
 
+  try {
+    const { initializePatientMarkdownFiles } = await import("@/lib/patient-memory");
+    await initializePatientMarkdownFiles(patient.id, {
+      name: data.firstName,
+      conditions: data.conditions,
+    });
+  } catch {
+    // Non-blocking for patient creation
+  }
+
   // Return minimal non-PHI response
   return NextResponse.json(
     { id: patient.id, riskLevel: patient.riskLevel, primaryDx: patient.primaryDx },

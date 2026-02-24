@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "test:e2e": "tsx --test tests/__tests__/e2e/*.test.ts"
+    "test:e2e": "tsx --test tests/__tests__/e2e/*.test.ts",
+    "seed:mock": "tsx scripts/seed-mock-patients.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",

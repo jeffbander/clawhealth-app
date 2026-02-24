@@ -48,6 +48,17 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true, riskLevel: true, primaryDx: true, createdAt: true },
     });
+
+    try {
+      const { initializePatientMarkdownFiles } = await import('@/lib/patient-memory');
+      await initializePatientMarkdownFiles(patient.id, {
+        name: body.firstName || "Test",
+        conditions: body.conditions || [],
+      });
+    } catch {
+      // Non-blocking for test setup
+    }
+
     return NextResponse.json(patient, { status: 201 });
   }
 

@@ -6,30 +6,11 @@ export const dynamic = "force-dynamic";
  */
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { encryptPHI } from "@/lib/encryption";
 import { logAudit, getAuditContext } from "@/lib/audit";
 import { sendSMS } from "@/lib/twilio";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-interface ParsedPatient {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  phone: string;
-  conditions: string[];
-  medications: Array<{
-    drugName: string;
-    dose: string;
-    frequency: string;
-    route: string;
-  }>;
-  medicalSummary: string;
-  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-  primaryDx: string;
-}
+import { parseEmrText, type ParsedPatient } from "@/lib/emr-parser";
 
 export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth();
@@ -67,42 +48,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Use Claude to parse raw EMR text into structured data
-  const completion = await anthropic.messages.create({
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 2048,
-    system: `You are a medical data extraction assistant. Parse the provided EMR/clinical text and extract structured patient data. Return ONLY valid JSON with no additional text.
-
-Extract:
-- firstName, lastName, dateOfBirth (YYYY-MM-DD format)
-- phone (if present, E.164 format preferred)
-- conditions: array of condition names (e.g. ["Heart Failure with reduced EF", "Atrial Fibrillation", "Type 2 Diabetes"])
-- medications: array of objects with drugName, dose, frequency, route (default "oral")
-- medicalSummary: 2-3 sentence clinical summary including relevant history, EF if available, relevant procedures
-- riskLevel: assess as LOW/MEDIUM/HIGH/CRITICAL using cardiology criteria:
-  CRITICAL = EF ≤30%, NYHA III-IV, elevated BNP/NT-proBNP, recent hospitalization, or ≥3 major comorbidities
-  HIGH = EF 31-40%, AFib on anticoagulation, CAD with stents/CABG, CKD stage 3+, or ≥2 major comorbidities  
-  MEDIUM = Controlled HTN with 2+ meds, stable valvular disease, single major condition
-  LOW = Well-controlled single condition, normal EF, low medication burden
-- primaryDx: primary ICD-10 code if identifiable (e.g. "I50.22" for HFrEF)
-
-If a field is not found in the text, use empty string or empty array. Never fabricate data not present in the source text.`,
-    messages: [
-      {
-        role: "user",
-        content: `Parse this EMR text into structured patient data:\n\n${emrText}`,
-      },
-    ],
-  });
-
   let parsed: ParsedPatient;
   try {
-    const text =
-      completion.content[0].type === "text" ? completion.content[0].text : "";
-    // Strip markdown code fences if present
-    const jsonStr = text.replace(/```json?\s*/g, "").replace(/```\s*/g, "").trim();
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
+    parsed = await parseEmrText(emrText);
+  } catch {
     return NextResponse.json(
       { error: "Failed to parse EMR text. Please try again with more structured input." },
       { status: 422 }
@@ -171,11 +120,16 @@ If a field is not found in the text, use empty string or empty array. Never fabr
 
   // Initialize NanoClaw patient memory (SOUL.md + MEMORY.md)
   try {
-    const { initializePatientMemory } = await import('@/lib/patient-memory')
+    const { initializePatientMemory, initializePatientMarkdownFiles } = await import('@/lib/patient-memory')
     await initializePatientMemory(patient.id, {
       name: parsed.firstName,
       conditions: parsed.conditions,
       communicationStyle: 'Warm, supportive, plain language appropriate for SMS. 2-4 sentences max.',
+    })
+    await initializePatientMarkdownFiles(patient.id, {
+      name: parsed.firstName || "Patient",
+      conditions: parsed.conditions,
+      medicalSummary: parsed.medicalSummary,
     })
   } catch {
     // Non-blocking — memory files are supplementary to DB

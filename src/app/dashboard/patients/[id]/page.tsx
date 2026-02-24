@@ -11,6 +11,7 @@ import PhysicianActions from "./PhysicianActions";
 import PatientTimeline from "./PatientTimeline";
 import MedInteractions from "./MedInteractions";
 import PatientDemographics from "./PatientDemographics";
+import PatientMarkdownTabs from "./PatientMarkdownTabs";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -118,11 +119,6 @@ export default async function PatientDetailPage({
     try { message = decryptPHI(a.encMessage); } catch {}
     return { ...a, message };
   });
-
-  let carePlanContent = "";
-  if (patient.carePlans[0]) {
-    try { carePlanContent = decryptPHI(patient.carePlans[0].encContent); } catch {}
-  }
 
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 
@@ -291,17 +287,9 @@ export default async function PatientDetailPage({
           )}
         </Card>
 
-        {/* Care Plan */}
-        <Card title="Care Plan" icon="📝">
-          {!carePlanContent ? (
-            <Empty>No care plan on file</Empty>
-          ) : (
-            <div className="px-5 py-4 text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
-              {carePlanContent}
-            </div>
-          )}
-        </Card>
       </div>
+
+      <PatientMarkdownTabs patientId={id} />
 
       {/* Physician Actions — message patient + resolve alerts */}
       <PhysicianActions

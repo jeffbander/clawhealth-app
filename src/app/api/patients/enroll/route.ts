@@ -153,6 +153,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    try {
+      const { initializePatientMarkdownFiles } = await import('@/lib/patient-memory');
+      await initializePatientMarkdownFiles(patient.id, {
+        name: firstName,
+        conditions: conditionList,
+        medicalSummary: additionalInfo?.trim() || '',
+      });
+    } catch {
+      // Non-blocking for enrollment flow
+    }
+
     // Send welcome SMS
     try {
       await sendSMS(
