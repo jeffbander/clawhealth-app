@@ -48,15 +48,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let parsed: ParsedPatient;
-  try {
-    parsed = await parseEmrText(emrText);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to parse EMR text. Please try again with more structured input." },
-      { status: 422 }
-    );
-  }
+  const parsed: ParsedPatient = await parseEmrText(emrText);
 
   // Create patient with encrypted PHI
   const patient = await prisma.patient.create({
