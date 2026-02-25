@@ -9,6 +9,22 @@ import { prisma } from "@/lib/prisma";
 import { encryptPHI } from "@/lib/encryption";
 import { sendSMS } from "@/lib/twilio";
 
+async function sendSMSWithRetry(phone: string, body: string, attempts = 3): Promise<boolean> {
+  let lastError: unknown;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      await sendSMS(phone, body);
+      return true;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[ENROLL] SMS attempt ${i} failed`, err instanceof Error ? err.message : String(err));
+      await new Promise((resolve) => setTimeout(resolve, 400 * i));
+    }
+  }
+  console.error("[ENROLL] SMS failed after retries", lastError instanceof Error ? lastError.message : String(lastError));
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { firstName, lastName, phone, dob, conditions, medications, additionalInfo, emrText } =
@@ -164,27 +180,24 @@ export async function POST(req: NextRequest) {
       // Non-blocking for enrollment flow
     }
 
-    // Send welcome SMS
-    try {
-      await sendSMS(
-        phone,
-        `Welcome to ClawHealth, ${firstName}! 🏥 I'm your AI health coordinator, working with your cardiologist at Mount Sinai.\n\nYou can text me anytime about:\n💊 Medications\n📊 Symptoms & vitals\n❓ Health questions\n\nText HELP for assistance or STOP to opt out.\n\nLet's start: how are you feeling today?`
-      );
-
-      // Store the welcome as a conversation
-      await prisma.conversation.create({
-        data: {
-          patientId: patient.id,
-          role: "AI",
-          encContent: encryptPHI(
-            `Welcome to ClawHealth, ${firstName}! I'm your AI health coordinator. You can text me anytime about medications, symptoms, or health questions.`
-          ),
-          audioUrl: `twilio://sms/welcome`,
-        },
-      });
-    } catch {
-      // SMS send failure shouldn't block enrollment
+    // Send welcome SMS (must succeed)
+    const welcomeMessage = `Welcome to ClawHealth, ${firstName}! 🏥 I'm your AI health coordinator, working with your cardiologist at Mount Sinai.\n\nYou can text me anytime about:\n💊 Medications\n📊 Symptoms & vitals\n❓ Health questions\n\nText HELP for assistance or STOP to opt out.\n\nLet's start: how are you feeling today?`;
+    const smsSent = await sendSMSWithRetry(phone, welcomeMessage, 3);
+    if (!smsSent) {
+      return NextResponse.json({ error: "Welcome SMS failed. Please retry." }, { status: 502 });
     }
+
+    // Store the welcome as a conversation
+    await prisma.conversation.create({
+      data: {
+        patientId: patient.id,
+        role: "AI",
+        encContent: encryptPHI(
+          `Welcome to ClawHealth, ${firstName}! I'm your AI health coordinator. You can text me anytime about medications, symptoms, or health questions.`
+        ),
+        audioUrl: `twilio://sms/welcome`,
+      },
+    });
 
     return NextResponse.json({
       success: true,

@@ -12,6 +12,22 @@ import { logAudit, getAuditContext } from "@/lib/audit";
 import { sendSMS } from "@/lib/twilio";
 import { parseEmrText, type ParsedPatient } from "@/lib/emr-parser";
 
+async function sendSMSWithRetry(phone: string, body: string, attempts = 3): Promise<boolean> {
+  let lastError: unknown;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      await sendSMS(phone, body);
+      return true;
+    } catch (err) {
+      lastError = err;
+      console.warn(`[ONBOARD] SMS attempt ${i} failed`, err instanceof Error ? err.message : String(err));
+      await new Promise((resolve) => setTimeout(resolve, 400 * i));
+    }
+  }
+  console.error("[ONBOARD] SMS failed after retries", lastError instanceof Error ? lastError.message : String(lastError));
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -127,26 +143,23 @@ export async function POST(req: NextRequest) {
     // Non-blocking — memory files are supplementary to DB
   }
 
-  // Send welcome SMS if phone number was parsed from EMR
+  // Send welcome SMS if phone number was parsed from EMR (must succeed)
   if (parsed.phone) {
-    try {
-      await sendSMS(
-        parsed.phone,
-        `Welcome to ClawHealth, ${parsed.firstName}! 🏥 I'm your AI health coordinator, working with your cardiologist at Mount Sinai.\n\nYou can text me anytime about:\n💊 Medications\n📊 Symptoms & vitals\n❓ Health questions\n\nText HELP for assistance or STOP to opt out.\n\nLet's start: how are you feeling today?`
-      );
-      await prisma.conversation.create({
-        data: {
-          patientId: patient.id,
-          role: "AI",
-          encContent: encryptPHI(
-            `Welcome to ClawHealth, ${parsed.firstName}! I'm your AI health coordinator. You can text me anytime about medications, symptoms, or health questions.`
-          ),
-          audioUrl: `twilio://sms/welcome`,
-        },
-      });
-    } catch {
-      // SMS failure shouldn't block onboarding — patient record is already created
+    const welcomeMessage = `Welcome to ClawHealth, ${parsed.firstName}! 🏥 I'm your AI health coordinator, working with your cardiologist at Mount Sinai.\n\nYou can text me anytime about:\n💊 Medications\n📊 Symptoms & vitals\n❓ Health questions\n\nText HELP for assistance or STOP to opt out.\n\nLet's start: how are you feeling today?`;
+    const smsSent = await sendSMSWithRetry(parsed.phone, welcomeMessage, 3);
+    if (!smsSent) {
+      return NextResponse.json({ error: "Welcome SMS failed. Please retry." }, { status: 502 });
     }
+    await prisma.conversation.create({
+      data: {
+        patientId: patient.id,
+        role: "AI",
+        encContent: encryptPHI(
+          `Welcome to ClawHealth, ${parsed.firstName}! I'm your AI health coordinator. You can text me anytime about medications, symptoms, or health questions.`
+        ),
+        audioUrl: `twilio://sms/welcome`,
+      },
+    });
   }
 
   // Audit log
