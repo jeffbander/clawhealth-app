@@ -14,7 +14,7 @@ import {
 import { generatePatientResponse } from "@/lib/ai-agent";
 import { logAudit } from "@/lib/audit";
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.clawmd.ai";
+const BASE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app.clawmd.ai").replace(/\s+/g, "");
 const useEleven = !!process.env.ELEVENLABS_API_KEY;
 
 /** Initial call handler — greet and start gathering speech */
