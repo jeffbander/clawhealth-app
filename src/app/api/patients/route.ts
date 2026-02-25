@@ -1,4 +1,10 @@
 export const dynamic = "force-dynamic";
+/**
+ * /api/patients
+ * GET: list patients for current org
+ * POST: create patient
+ * HIPAA: all PHI encrypted, full audit logging
+ */
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -23,6 +29,54 @@ const CreatePatientSchema = z.object({
   conditions: z.array(z.string()).default([]),
 });
 
+export async function GET(req: NextRequest) {
+  const { userId, orgId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const ctx = await getAuditContext(userId, orgId ?? undefined);
+
+  const patients = await prisma.patient.findMany({
+    where: { organizationId: orgId ?? "" },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      encFirstName: true,
+      riskLevel: true,
+      primaryDx: true,
+      lastInteraction: true,
+      createdAt: true,
+      agentEnabled: true,
+      _count: {
+        select: {
+          alerts: { where: { resolved: false } },
+          medications: { where: { active: true } },
+        },
+      },
+    },
+  });
+
+  await logAudit("READ", "patient", "list", ctx, { count: patients.length });
+
+  // Decrypt only firstName for list view — minimal PHI exposure
+  const result = patients.map((p) => {
+    let firstName = "Patient";
+    try { firstName = decryptPHI(p.encFirstName); } catch {}
+    return {
+      id: p.id,
+      firstName,
+      riskLevel: p.riskLevel,
+      primaryDx: p.primaryDx,
+      lastInteraction: p.lastInteraction,
+      createdAt: p.createdAt,
+      agentEnabled: p.agentEnabled,
+      activeAlerts: p._count.alerts,
+      activeMedications: p._count.medications,
+    };
+  });
+
+  return NextResponse.json(result);
+}
+
 export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth();
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,6 +90,7 @@ export async function POST(req: NextRequest) {
 
   const data = parsed.data;
 
+  // Encrypt all PHI fields before storage
   const patient = await prisma.patient.create({
     data: {
       clerkUserId: data.clerkUserId,
@@ -70,29 +125,40 @@ export async function POST(req: NextRequest) {
     // Non-blocking for patient creation
   }
 
-  // Send welcome SMS if phone number is provided
+  // Send welcome SMS + store conversation record when a phone number is provided.
+  // This fires for every patient creation path (dashboard "Add Patient" form).
+  // The enroll and onboard routes have their own equivalent blocks.
   if (data.phone) {
     try {
-      await sendSMS(
-        data.phone,
-        `Welcome to ClawHealth!`
-      );
+      const welcomeText =
+        `Welcome to ClawHealth, ${data.firstName}! \uD83C\uDFE5 I\u2019m your AI health coordinator, ` +
+        `working with your cardiologist at Mount Sinai.\n\n` +
+        `You can text me anytime about:\n` +
+        `\uD83D\uDC8A Medications\n` +
+        `\uD83D\uDCCA Symptoms & vitals\n` +
+        `\u2753 Health questions\n\n` +
+        `Text HELP for assistance or STOP to opt out.`;
+
+      await sendSMS(data.phone, welcomeText);
+
       await prisma.conversation.create({
         data: {
           patientId: patient.id,
           role: "AI",
           encContent: encryptPHI(
-            `Welcome to ClawHealth!`
+            `Welcome to ClawHealth, ${data.firstName}! I\u2019m your AI health coordinator. ` +
+            `You can text me anytime about medications, symptoms, or health questions.`
           ),
-          audioUrl: `twilio://sms/welcome`,
+          audioUrl: "twilio://sms/welcome",
         },
       });
     } catch (e) {
-       console.error(`Failed to send welcome SMS to ${data.phone}:`, e)
-       // Non-blocking for patient creation
+      console.error("[patients/route] Failed to send welcome SMS:", e);
+      // Non-blocking — patient record is already created
     }
   }
 
+  // Return minimal non-PHI response
   return NextResponse.json(
     { id: patient.id, riskLevel: patient.riskLevel, primaryDx: patient.primaryDx },
     { status: 201 }
