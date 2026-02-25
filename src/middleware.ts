@@ -19,6 +19,8 @@ const isProtectedApiRoute = createRouteMatcher([
 
 // Twilio webhooks use signature validation, not Clerk auth
 const isTwilioRoute = createRouteMatcher(['/api/twilio(.*)'])
+// Public voice TTS endpoint (used by Twilio <Play>)
+const isPublicVoiceRoute = createRouteMatcher(['/api/voice/tts(.*)'])
 // Test setup routes (dev only)
 const isTestRoute = createRouteMatcher(['/api/test(.*)'])
 // Vercel cron jobs use Authorization: Bearer <CRON_SECRET>
@@ -29,6 +31,8 @@ const isEnrollRoute = createRouteMatcher(['/api/patients/enroll'])
 export default clerkMiddleware(async (auth, req) => {
   // Skip Clerk auth for Twilio webhooks (they use signature validation)
   if (isTwilioRoute(req)) return NextResponse.next()
+  // Skip Clerk auth for public TTS endpoint
+  if (isPublicVoiceRoute(req)) return NextResponse.next()
   // Skip Clerk auth for test setup routes in development
   if (isTestRoute(req) && process.env.NODE_ENV !== 'production') return NextResponse.next()
   // Skip Clerk auth for cron jobs (they use CRON_SECRET)
