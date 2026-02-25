@@ -7,7 +7,7 @@ const ELEVEN_API = "https://api.elevenlabs.io/v1/text-to-speech";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const text = searchParams.get("text") || "";
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // default: Rachel
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // default: Rachel (warm)
   const apiKey = process.env.ELEVENLABS_API_KEY;
 
   if (!apiKey) {
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({
         text,
         model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.4, similarity_boost: 0.8 },
+        voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0.6 },
       }),
     });
 
