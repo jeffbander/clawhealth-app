@@ -14,6 +14,9 @@ import {
 import { generatePatientResponse } from "@/lib/ai-agent";
 import { logAudit } from "@/lib/audit";
 
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.clawmd.ai";
+const useEleven = !!process.env.ELEVENLABS_API_KEY;
+
 /** Initial call handler — greet and start gathering speech */
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -31,7 +34,7 @@ export async function POST(req: NextRequest) {
 
   // Validate Twilio signature (log-only for now — URL mismatch common during setup)
   const signature = req.headers.get("x-twilio-signature") || "";
-  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.clawmd.ai"}/api/twilio/voice`;
+  const webhookUrl = `${BASE_URL}/api/twilio/voice`;
   if (signature && !validateTwilioWebhook(signature, webhookUrl, params)) {
     console.error("[TWILIO_VOICE] Invalid signature for URL:", webhookUrl);
   }
@@ -40,10 +43,14 @@ export async function POST(req: NextRequest) {
   const response = twiml();
 
   if (!patient) {
-    response.say(
-      { voice: "Polly.Joanna" },
-      "Thank you for calling ClawHealth. We could not identify your account. Please contact your care team directly. Goodbye."
-    );
+    if (useEleven) {
+      response.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent("Thank you for calling ClawHealth. We could not identify your account. Please contact your care team directly. Goodbye.")}`);
+    } else {
+      response.say(
+        { voice: "Polly.Joanna" },
+        "Thank you for calling ClawHealth. We could not identify your account. Please contact your care team directly. Goodbye."
+      );
+    }
     response.hangup();
     return new NextResponse(response.toString(), {
       headers: { "Content-Type": "text/xml" },
@@ -51,10 +58,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (!patient.agentEnabled) {
-    response.say(
-      { voice: "Polly.Joanna" },
-      "Your AI health coordinator is currently unavailable. Please contact your care team directly. Goodbye."
-    );
+    if (useEleven) {
+      response.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent("Your AI health coordinator is currently unavailable. Please contact your care team directly. Goodbye.")}`);
+    } else {
+      response.say(
+        { voice: "Polly.Joanna" },
+        "Your AI health coordinator is currently unavailable. Please contact your care team directly. Goodbye."
+      );
+    }
     response.hangup();
     return new NextResponse(response.toString(), {
       headers: { "Content-Type": "text/xml" },
@@ -102,7 +113,11 @@ export async function POST(req: NextRequest) {
     });
 
     // Say the AI response, then gather more speech
-    response.say({ voice: "Polly.Joanna" }, aiResponse);
+    if (useEleven) {
+      response.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent(aiResponse)}`);
+    } else {
+      response.say({ voice: "Polly.Joanna" }, aiResponse);
+    }
 
     const gather = response.gather({
       input: ["speech"],
@@ -110,16 +125,24 @@ export async function POST(req: NextRequest) {
       action: "/api/twilio/voice",
       method: "POST",
     });
-    gather.say(
-      { voice: "Polly.Joanna" },
-      "Is there anything else I can help you with?"
-    );
+    if (useEleven) {
+      gather.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent("Is there anything else I can help you with?")}`);
+    } else {
+      gather.say(
+        { voice: "Polly.Joanna" },
+        "Is there anything else I can help you with?"
+      );
+    }
 
     // If no input, say goodbye
-    response.say(
-      { voice: "Polly.Joanna" },
-      "Thank you for calling ClawHealth. Take care and stay healthy. Goodbye."
-    );
+    if (useEleven) {
+      response.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent("Thank you for calling ClawHealth. Take care and stay healthy. Goodbye.")}`);
+    } else {
+      response.say(
+        { voice: "Polly.Joanna" },
+        "Thank you for calling ClawHealth. Take care and stay healthy. Goodbye."
+      );
+    }
     response.hangup();
 
     return new NextResponse(response.toString(), {
@@ -134,16 +157,24 @@ export async function POST(req: NextRequest) {
     action: "/api/twilio/voice",
     method: "POST",
   });
-  gather.say(
-    { voice: "Polly.Joanna" },
-    "Hello, this is your ClawHealth AI health coordinator. How can I help you today?"
-  );
+  if (useEleven) {
+    gather.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent("Hello, this is your ClawHealth AI health coordinator. How can I help you today?")}`);
+  } else {
+    gather.say(
+      { voice: "Polly.Joanna" },
+      "Hello, this is your ClawHealth AI health coordinator. How can I help you today?"
+    );
+  }
 
   // If no input after greeting
-  response.say(
-    { voice: "Polly.Joanna" },
-    "I didn't hear anything. Please call back when you're ready. Goodbye."
-  );
+  if (useEleven) {
+    response.play(`${BASE_URL}/api/voice/tts?text=${encodeURIComponent("I didn't hear anything. Please call back when you're ready. Goodbye.")}`);
+  } else {
+    response.say(
+      { voice: "Polly.Joanna" },
+      "I didn't hear anything. Please call back when you're ready. Goodbye."
+    );
+  }
   response.hangup();
 
   // Audit the call start
