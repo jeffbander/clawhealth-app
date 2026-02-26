@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 const SEVERITY_DOT: Record<string, string> = {
@@ -28,6 +29,8 @@ interface Alert {
   severity: string;
   category: string;
   message: string;
+  patientMessage?: string;
+  matchedKeywords?: string[];
   firstName: string;
   createdAt: string;
 }
@@ -104,7 +107,7 @@ export default function AlertsPage() {
         ) : (
           <>
             {/* Header */}
-            <div className="hidden lg:grid grid-cols-[100px_1fr_1fr_100px_90px] gap-4 px-5 py-3 bg-[var(--background)] border-b border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+            <div className="hidden lg:grid grid-cols-[100px_1fr_2fr_100px_90px] gap-4 px-5 py-3 bg-[var(--background)] border-b border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               <span>Severity</span>
               <span>Patient</span>
               <span>Alert</span>
@@ -116,7 +119,7 @@ export default function AlertsPage() {
               {alerts.map((a) => (
                 <div
                   key={a.id}
-                  className={`grid grid-cols-[100px_1fr_1fr_100px_90px] gap-4 px-5 py-3.5 items-center border-l-4 ${SEVERITY_BORDER[a.severity] ?? "border-l-gray-300"} hover:bg-[var(--background)] transition-colors duration-150`}
+                  className={`grid grid-cols-[100px_1fr_2fr_100px_90px] gap-4 px-5 py-3.5 items-start border-l-4 ${SEVERITY_BORDER[a.severity] ?? "border-l-gray-300"} hover:bg-[var(--background)] transition-colors duration-150`}
                 >
                   {/* Severity */}
                   <span className={`inline-flex items-center gap-1.5 text-[0.8125rem] font-bold ${SEVERITY_TEXT[a.severity] ?? ""}`}>
@@ -124,13 +127,32 @@ export default function AlertsPage() {
                     {a.severity}
                   </span>
 
-                  {/* Patient */}
-                  <span className="font-semibold text-sm text-[var(--text-primary)]">{a.firstName}</span>
+                  {/* Patient — clickable link */}
+                  <Link
+                    href={`/dashboard/patients/${a.patientId}`}
+                    className="font-semibold text-sm text-[var(--primary)] hover:underline no-underline"
+                  >
+                    {a.firstName}
+                  </Link>
 
-                  {/* Alert */}
+                  {/* Alert + patient message + keywords */}
                   <div>
                     <div className="text-[0.8125rem] font-medium text-[var(--text-secondary)] mb-0.5">[{a.category}]</div>
-                    <div className="text-[0.8125rem] text-[var(--text-muted)] truncate">{a.message}</div>
+                    <div className="text-[0.8125rem] text-[var(--text-muted)]">{a.message}</div>
+                    {a.patientMessage && (
+                      <div className="mt-1.5 text-[0.8125rem] text-[var(--text-primary)] bg-[var(--background)] border border-[var(--border)] rounded-lg px-3 py-2 italic">
+                        &ldquo;{a.patientMessage}&rdquo;
+                      </div>
+                    )}
+                    {a.matchedKeywords && a.matchedKeywords.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {a.matchedKeywords.map((kw) => (
+                          <span key={kw} className="text-[0.6875rem] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600 ring-1 ring-red-500/10">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Time */}

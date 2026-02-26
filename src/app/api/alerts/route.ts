@@ -34,8 +34,13 @@ export async function GET() {
   const result = alerts.map((a) => {
     let message = "";
     let firstName = "Patient";
+    let patientMessage: string | undefined;
     try { message = decryptPHI(a.encMessage); } catch {}
     try { firstName = decryptPHI(a.patient.encFirstName); } catch {}
+    try { if (a.encPatientMessage) patientMessage = decryptPHI(a.encPatientMessage); } catch {}
+
+    let matchedKeywords: string[] | undefined;
+    try { if (a.matchedKeywords) matchedKeywords = JSON.parse(a.matchedKeywords); } catch {}
 
     return {
       id: a.id,
@@ -44,6 +49,8 @@ export async function GET() {
       severity: a.severity,
       category: a.category,
       message,
+      patientMessage,
+      matchedKeywords,
       triggerSource: a.triggerSource,
       createdAt: a.createdAt,
     };

@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Generate AI response
-  const { response, requiresEscalation, escalationReason } =
+  const { response, requiresEscalation, escalationReason, matchedKeywords } =
     await generatePatientResponse(patientId, message, history);
 
   // Store patient message (encrypted) — NEVER log PHI
@@ -111,6 +111,8 @@ export async function POST(req: NextRequest) {
           escalationReason ?? "Emergency keywords detected during voice call"
         ),
         triggerSource: "ai_agent",
+        encPatientMessage: encryptPHI(message),
+        matchedKeywords: matchedKeywords ? JSON.stringify(matchedKeywords) : undefined,
       },
     });
   }

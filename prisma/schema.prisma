@@ -195,8 +195,10 @@ model Alert {
   severity      AlertSeverity
   category      String
   encMessage    String
-  triggerSource String
-  resolved      Boolean       @default(false)
+  triggerSource     String
+  encPatientMessage String?         // Encrypted verbatim patient message that triggered the alert
+  matchedKeywords   String?         // JSON array of matched emergency keywords (not PHI)
+  resolved          Boolean  @default(false)
   resolvedBy    String?
   resolvedAt    DateTime?
   encResolution String?

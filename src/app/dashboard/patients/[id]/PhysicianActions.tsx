@@ -10,6 +10,8 @@ interface AlertInfo {
   severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
   category: string;
   message: string;
+  patientMessage?: string;
+  matchedKeywords?: string[];
 }
 
 interface Props {
@@ -91,6 +93,20 @@ function AlertResolveRow({ alert, onResolved }: { alert: AlertInfo; onResolved: 
               <span className="text-xs text-gray-400 font-medium">{alert.category.replace(/_/g, " ")}</span>
             </div>
             <p className="text-xs text-gray-600 leading-relaxed m-0 line-clamp-2">{alert.message}</p>
+            {alert.patientMessage && (
+              <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1.5 mt-1.5 m-0 italic line-clamp-3">
+                &ldquo;{alert.patientMessage}&rdquo;
+              </p>
+            )}
+            {alert.matchedKeywords && alert.matchedKeywords.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {alert.matchedKeywords.map((kw) => (
+                  <span key={kw} className="text-[0.5625rem] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 ring-1 ring-red-500/10">
+                    {kw}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <button

@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const ctx = await getAuditContext(userId, patient.organizationId, patientId);
 
   // Generate AI response
-  const { response, requiresEscalation, escalationReason } =
+  const { response, requiresEscalation, escalationReason, matchedKeywords } =
     await generatePatientResponse(patientId, message, history);
 
   // Store patient message (encrypted) — NEVER log PHI
@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
         category: "symptom",
         encMessage: encryptPHI(escalationReason ?? "AI agent flagged emergency keywords in patient message"),
         triggerSource: "ai_agent",
+        encPatientMessage: encryptPHI(message),
+        matchedKeywords: matchedKeywords ? JSON.stringify(matchedKeywords) : undefined,
       },
     });
   }

@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     await storeConversation(patient.id, "PATIENT", speechResult, `twilio://voice/${callSid}`);
 
     // Generate AI response
-    const { response: aiResponse, requiresEscalation, escalationReason } =
+    const { response: aiResponse, requiresEscalation, escalationReason, matchedKeywords } =
       await generatePatientResponse(patient.id, speechResult, []);
 
     // Store AI response (encrypted)
@@ -97,6 +97,8 @@ export async function POST(req: NextRequest) {
             escalationReason ?? "Emergency keywords detected during voice call"
           ),
           triggerSource: "twilio_voice",
+          encPatientMessage: encryptPHI(speechResult),
+          matchedKeywords: matchedKeywords ? JSON.stringify(matchedKeywords) : undefined,
         },
       });
     }

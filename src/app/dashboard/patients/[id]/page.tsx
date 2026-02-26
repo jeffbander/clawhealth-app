@@ -117,8 +117,12 @@ export default async function PatientDetailPage({
 
   const alerts = patient.alerts.map((a) => {
     let message = "";
+    let patientMessage: string | undefined;
+    let matchedKeywords: string[] | undefined;
     try { message = decryptPHI(a.encMessage); } catch {}
-    return { ...a, message };
+    try { if (a.encPatientMessage) patientMessage = decryptPHI(a.encPatientMessage); } catch {}
+    try { if (a.matchedKeywords) matchedKeywords = JSON.parse(a.matchedKeywords); } catch {}
+    return { ...a, message, patientMessage, matchedKeywords };
   });
 
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
@@ -281,6 +285,20 @@ export default async function PatientDetailPage({
                       <span className="text-[0.625rem] text-gray-300 ml-auto">{timeAgo(a.createdAt)}</span>
                     </div>
                     <p className="text-sm text-gray-600 leading-relaxed m-0">{a.message}</p>
+                    {a.patientMessage && (
+                      <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-2.5 py-1.5 mt-1.5 m-0 italic">
+                        &ldquo;{a.patientMessage}&rdquo;
+                      </p>
+                    )}
+                    {a.matchedKeywords && a.matchedKeywords.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {a.matchedKeywords.map((kw) => (
+                          <span key={kw} className="text-[0.5625rem] font-medium px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 ring-1 ring-red-500/10">
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -305,6 +323,8 @@ export default async function PatientDetailPage({
           severity: a.severity as "CRITICAL" | "HIGH" | "MEDIUM" | "LOW",
           category: a.category,
           message: a.message,
+          patientMessage: a.patientMessage,
+          matchedKeywords: a.matchedKeywords,
         }))}
       />
 

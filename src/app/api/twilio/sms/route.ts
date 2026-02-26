@@ -102,11 +102,13 @@ export async function POST(req: NextRequest) {
   let response: string;
   let requiresEscalation = false;
   let escalationReason: string | undefined;
+  let matchedKeywords: string[] | undefined;
   try {
     const result = await generatePatientResponse(patient.id, body);
     response = result.response;
     requiresEscalation = result.requiresEscalation;
     escalationReason = result.escalationReason;
+    matchedKeywords = result.matchedKeywords;
   } catch (err) {
     console.error("[TWILIO_SMS] AI agent error:", err instanceof Error ? err.message : err);
     response = "I'm having a brief technical issue. Your message was received — please try again in a moment, or contact your care team directly for urgent needs.";
@@ -129,6 +131,8 @@ export async function POST(req: NextRequest) {
           escalationReason ?? "Emergency keywords detected in SMS"
         ),
         triggerSource: "twilio_sms",
+        encPatientMessage: encryptPHI(body),
+        matchedKeywords: matchedKeywords ? JSON.stringify(matchedKeywords) : undefined,
       },
     });
 
