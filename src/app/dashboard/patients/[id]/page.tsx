@@ -12,6 +12,7 @@ import PatientTimeline from "./PatientTimeline";
 import MedInteractions from "./MedInteractions";
 import PatientDemographics from "./PatientDemographics";
 import PatientMarkdownTabs from "./PatientMarkdownTabs";
+import VerificationQueue from "./VerificationQueue";
 
 // ─── Style helpers ────────────────────────────────────────────────────────────
 
@@ -290,6 +291,9 @@ export default async function PatientDetailPage({
       </div>
 
       <PatientMarkdownTabs patientId={id} />
+
+      {/* Physician Verification Queue — review patient-reported data */}
+      <VerificationQueue patientId={id} />
 
       {/* Physician Actions — message patient + resolve alerts */}
       <PhysicianActions

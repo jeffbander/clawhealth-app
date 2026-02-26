@@ -31,6 +31,28 @@ enum VitalType {
   TEMPERATURE
 }
 
+// ─── Source Attribution Enums ─────────────────────────────────
+// Per Albert + Manny joint spec: every structured clinical datum
+// gets source tracking for safety and audit compliance.
+
+enum SourceType {
+  PATIENT_SMS       // Patient reported via text message
+  PATIENT_VOICE     // Patient reported via phone call
+  PATIENT_PORTAL    // Patient entered via web portal
+  CLINICIAN         // Physician or clinical staff entered
+  DEVICE            // Connected device (BP cuff, scale, etc.)
+  EMR_IMPORT        // Imported from EMR paste
+  AI_EXTRACTED      // AI extracted from conversation
+  SYSTEM            // System-generated (cron, auto-calculation)
+}
+
+enum VerificationStatus {
+  UNVERIFIED        // Not yet reviewed by physician
+  VERIFIED          // Confirmed by physician
+  DISPUTED          // Physician flagged as incorrect
+  PENDING_REVIEW    // Queued for physician review (yellow flag)
+}
+
 model Patient {
   id             String   @id @default(cuid())
   clerkUserId    String   @unique
@@ -127,9 +149,19 @@ model Medication {
   lastTaken    DateTime?
   encNotes     String?
   active       Boolean  @default(true)
+
+  // ─── Source Attribution (Manny PR) ──────────────────────────
+  sourceType          SourceType         @default(CLINICIAN)
+  verificationStatus  VerificationStatus @default(UNVERIFIED)
+  verifiedBy          String?            // clerkUserId of verifying physician
+  verifiedAt          DateTime?
+  sourceMessageId     String?            // conversation ID that reported this
+  sourceConfidence    Int                @default(0)  // 0-3: 0=unknown, 1=low, 2=medium, 3=high
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   @@index([patientId])
+  @@index([verificationStatus])
 }
 
 model Vital {
@@ -141,10 +173,19 @@ model Vital {
   unit        String
   recordedAt  DateTime
   source      String
+
+  // ─── Source Attribution (Manny PR) ──────────────────────────
+  sourceType          SourceType         @default(PATIENT_SMS)
+  verificationStatus  VerificationStatus @default(UNVERIFIED)
+  verifiedBy          String?
+  verifiedAt          DateTime?
+  sourceConfidence    Int                @default(2)  // vitals usually medium confidence
+
   createdAt   DateTime  @default(now())
   @@index([patientId])
   @@index([type])
   @@index([recordedAt])
+  @@index([verificationStatus])
 }
 
 model Alert {
