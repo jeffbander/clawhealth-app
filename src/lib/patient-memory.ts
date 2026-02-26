@@ -464,6 +464,78 @@ export async function appendMemorySummary(patientId: string, summary: string): P
   await writeMemory(patientId, `${current}\n\n${heading}${entry}\n`)
 }
 
+// ─── Insight Routing to Markdown Files ─────────────────────
+
+import type { ParsedPatient } from '@/lib/emr-parser'
+import {
+  mergeLabsMarkdown,
+  mergeMedicalHistoryMarkdown,
+  mergeTrendsMarkdown,
+} from '@/lib/patient-markdown'
+
+export type InsightTarget = 'MedicalHistory' | 'Labs' | 'Trends' | 'Memory'
+
+export async function routeInsightToMarkdown(
+  patientId: string,
+  fact: string,
+  target: InsightTarget,
+  category: string
+): Promise<void> {
+  const today = currentDateString()
+
+  if (target === 'Memory') {
+    await appendMemorySummary(patientId, `[UNVERIFIED] ${fact}`)
+    return
+  }
+
+  if (target === 'MedicalHistory') {
+    const current = await readPatientMarkdownFile(patientId, 'MedicalHistory.md')
+    if (!current) return
+    const stub: ParsedPatient = {
+      firstName: '', lastName: '', dateOfBirth: '', phone: '',
+      conditions: (category === 'allergy' || category === 'condition') ? [`[UNVERIFIED] ${fact}`] : [],
+      medications: [], medicalSummary: '', riskLevel: 'MEDIUM', primaryDx: '',
+      procedures: category === 'procedure' ? [`[UNVERIFIED] ${fact}`] : [],
+      labs: [], vitals: [], symptoms: [], planItems: [],
+    }
+    const merged = mergeMedicalHistoryMarkdown(current, stub)
+    await writePatientMarkdownFile(patientId, 'MedicalHistory.md', merged)
+    return
+  }
+
+  if (target === 'Labs') {
+    const current = await readPatientMarkdownFile(patientId, 'Labs.md')
+    if (!current) return
+    const stub: ParsedPatient = {
+      firstName: '', lastName: '', dateOfBirth: '', phone: '',
+      conditions: [], medications: [], medicalSummary: '', riskLevel: 'MEDIUM', primaryDx: '',
+      procedures: [],
+      labs: [{ name: `[UNVERIFIED] ${fact}`, value: '', unit: '', date: today }],
+      vitals: [], symptoms: [], planItems: [],
+    }
+    const merged = mergeLabsMarkdown(current, stub)
+    await writePatientMarkdownFile(patientId, 'Labs.md', merged)
+    return
+  }
+
+  if (target === 'Trends') {
+    const current = await readPatientMarkdownFile(patientId, 'Trends.md')
+    if (!current) return
+    const isVital = category === 'vital_trend'
+    const stub: ParsedPatient = {
+      firstName: '', lastName: '', dateOfBirth: '', phone: '',
+      conditions: [], medications: [], medicalSummary: '', riskLevel: 'MEDIUM', primaryDx: '',
+      procedures: [], labs: [],
+      vitals: isVital ? [{ type: `[UNVERIFIED] ${fact}`, value: '', unit: '', date: today }] : [],
+      symptoms: !isVital ? [`[UNVERIFIED] ${fact}`] : [],
+      planItems: [],
+    }
+    const merged = mergeTrendsMarkdown(current, stub)
+    await writePatientMarkdownFile(patientId, 'Trends.md', merged)
+    return
+  }
+}
+
 // ─── Daily Logs ────────────────────────────────────────────
 
 function todayStr(): string {
@@ -505,10 +577,11 @@ export async function initializePatientMemory(
 // ─── Load Memory Context for AI Agent ──────────────────────
 
 export async function loadMemoryContext(patientId: string): Promise<string | null> {
-  const [soul, memory, todayLog] = await Promise.all([
+  const [soul, memory, todayLog, mdFiles] = await Promise.all([
     readSoul(patientId),
     readMemory(patientId),
     readDailyLog(patientId),
+    readAllPatientMarkdownFiles(patientId),
   ])
 
   const yesterday = new Date()
@@ -520,6 +593,19 @@ export async function loadMemoryContext(patientId: string): Promise<string | nul
   let context = ''
   if (soul) context += `=== PATIENT AGENT IDENTITY ===\n${soul}\n\n`
   if (memory) context += `=== ACCUMULATED PATIENT KNOWLEDGE ===\n${memory}\n\n`
+
+  // Append clinical markdown files (skip CarePlan.md — already loaded via buildSystemPrompt)
+  const MD_CAP = 4000
+  if (mdFiles['Labs.md']?.trim()) {
+    context += `=== LABS & LAB HISTORY ===\n${mdFiles['Labs.md'].slice(0, MD_CAP)}\n\n`
+  }
+  if (mdFiles['MedicalHistory.md']?.trim()) {
+    context += `=== MEDICAL HISTORY ===\n${mdFiles['MedicalHistory.md'].slice(0, MD_CAP)}\n\n`
+  }
+  if (mdFiles['Trends.md']?.trim()) {
+    context += `=== VITALS & SYMPTOM TRENDS ===\n${mdFiles['Trends.md'].slice(0, MD_CAP)}\n\n`
+  }
+
   if (yesterdayLog) context += `=== YESTERDAY'S INTERACTIONS ===\n${yesterdayLog}\n\n`
   if (todayLog) context += `=== TODAY'S INTERACTIONS ===\n${todayLog}\n\n`
 
@@ -539,13 +625,78 @@ export async function logInteraction(
   }
 ): Promise<void> {
   try {
-    let entry = `**Patient**: "${patientMessage.slice(0, 200)}"\n**Agent**: "${aiResponse.slice(0, 200)}"`
+    let entry = `**Patient**: "${patientMessage.slice(0, 800)}"\n**Agent**: "${aiResponse.slice(0, 800)}"`
     if (insights?.moodOrConcern) entry += `\n**Mood/Concern**: ${insights.moodOrConcern}`
     if (insights?.adherenceNote) entry += `\n**Adherence**: ${insights.adherenceNote}`
     if (insights?.behavioralObservation) entry += `\n**Observation**: ${insights.behavioralObservation}`
     await appendDailyLog(patientId, entry)
   } catch {
     // Best-effort
+  }
+}
+
+// ─── Session Compaction (Long Conversations) ──────────────
+
+import { PrismaClient } from '@prisma/client'
+import { decryptPHI } from '@/lib/encryption'
+
+const prismaForCompact = new PrismaClient()
+
+export async function compactSessionIfNeeded(patientId: string): Promise<void> {
+  try {
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
+    const todayCount = await prismaForCompact.conversation.count({
+      where: {
+        patientId,
+        createdAt: { gte: todayStart },
+        NOT: { audioUrl: { startsWith: 'system://' } },
+      },
+    })
+
+    if (todayCount < 16) return
+
+    // Check if we already compacted today
+    const dailyLog = await readDailyLog(patientId)
+    if (dailyLog?.includes('### Session Summary')) return
+
+    // Load messages 11-20 (the ones falling off the 10-message window)
+    const olderMessages = await prismaForCompact.conversation.findMany({
+      where: {
+        patientId,
+        createdAt: { gte: todayStart },
+        NOT: { audioUrl: { startsWith: 'system://' } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: 10,
+      take: 10,
+      select: { role: true, encContent: true },
+    })
+
+    if (olderMessages.length === 0) return
+
+    const transcript = olderMessages
+      .reverse()
+      .map(m => {
+        const role = m.role === 'PATIENT' ? 'Patient' : 'AI'
+        return `${role}: ${decryptPHI(m.encContent)}`
+      })
+      .join('\n')
+
+    const completion = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      system: 'Summarize key clinical facts, symptoms reported, medication discussions, and patient concerns from these messages. Max 200 words. Be factual and concise.',
+      messages: [{ role: 'user', content: transcript }],
+    })
+
+    const summary = completion.content[0].type === 'text' ? completion.content[0].text : ''
+    if (summary.length > 20) {
+      await appendDailyLog(patientId, `### Session Summary\n${summary}`)
+    }
+  } catch {
+    // Best-effort — never block patient responses
   }
 }
 
@@ -562,29 +713,64 @@ export async function consolidateMemory(patientId: string): Promise<void> {
 
   if (logs.length === 0) return
 
-  const currentMemory = await readMemory(patientId) || ''
+  const [currentMemory, mdFiles] = await Promise.all([
+    readMemory(patientId).then(m => m || ''),
+    readAllPatientMarkdownFiles(patientId),
+  ])
 
   const completion = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 1024,
+    max_tokens: 1536,
     system: `You are a clinical memory curator for a patient's AI health agent.
-Given the current MEMORY.md and recent daily interaction logs, produce an updated MEMORY.md.
+Given the current MEMORY.md, recent daily interaction logs, and current markdown file contents, produce TWO outputs separated by delimiter markers.
 
-Rules:
+OUTPUT 1 — Updated MEMORY.md (between ---MEMORY_START--- and ---MEMORY_END---):
 - Keep the same section structure (Communication Patterns, Behavioral Observations, etc.)
 - Distill NEW patterns from the daily logs into the appropriate sections
 - Remove outdated observations contradicted by newer data
 - Keep it concise — curated knowledge, not raw logs
 - Never include PHI identifiers (SSN, DOB, address) — only clinical context
-- Preserve important relationship moments and trust-building notes`,
+- Preserve important relationship moments and trust-building notes
+
+OUTPUT 2 — Clinical facts to route (between ---ROUTING_START--- and ---ROUTING_END---):
+A JSON array of clinical facts from the daily logs that should be persisted to markdown files.
+Each entry: { "fact": string, "target": "MedicalHistory" | "Labs" | "Trends", "category": "allergy" | "condition" | "procedure" | "lab_value" | "vital_trend" | "symptom" }
+ONLY include facts NOT already present in the current markdown files (deduplicate).
+Empty array [] if nothing new to route.`,
     messages: [{
       role: 'user',
-      content: `Current MEMORY.md:\n${currentMemory}\n\nRecent daily logs:\n${logs.join('\n---\n')}`
+      content: `Current MEMORY.md:\n${currentMemory}\n\nCurrent Labs.md:\n${mdFiles['Labs.md'].slice(0, 2000)}\n\nCurrent MedicalHistory.md:\n${mdFiles['MedicalHistory.md'].slice(0, 2000)}\n\nCurrent Trends.md:\n${mdFiles['Trends.md'].slice(0, 2000)}\n\nRecent daily logs:\n${logs.join('\n---\n')}`
     }]
   })
 
-  const updated = completion.content[0].type === 'text' ? completion.content[0].text : ''
-  if (updated.length > 50) {
-    await writeMemory(patientId, updated)
+  const text = completion.content[0].type === 'text' ? completion.content[0].text : ''
+
+  // Parse MEMORY.md
+  const memoryMatch = text.match(/---MEMORY_START---\s*([\s\S]*?)\s*---MEMORY_END---/)
+  const updatedMemory = memoryMatch?.[1]?.trim()
+  if (updatedMemory && updatedMemory.length > 50) {
+    await writeMemory(patientId, updatedMemory)
+  } else if (text.length > 50 && !text.includes('---ROUTING_START---')) {
+    // Fallback: if no delimiters, treat entire response as MEMORY.md (backward compat)
+    await writeMemory(patientId, text)
+  }
+
+  // Parse routing JSON
+  const routingMatch = text.match(/---ROUTING_START---\s*([\s\S]*?)\s*---ROUTING_END---/)
+  if (routingMatch?.[1]) {
+    try {
+      const jsonStr = routingMatch[1].replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim()
+      const entries = JSON.parse(jsonStr)
+      if (Array.isArray(entries)) {
+        const validTargets: InsightTarget[] = ['MedicalHistory', 'Labs', 'Trends']
+        for (const entry of entries) {
+          if (entry?.fact && entry?.target && entry?.category && validTargets.includes(entry.target)) {
+            await routeInsightToMarkdown(patientId, entry.fact, entry.target, entry.category)
+          }
+        }
+      }
+    } catch {
+      // Best-effort — routing parse failure doesn't block memory update
+    }
   }
 }

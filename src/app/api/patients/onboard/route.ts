@@ -11,6 +11,13 @@ import { encryptPHI } from "@/lib/encryption";
 import { logAudit, getAuditContext } from "@/lib/audit";
 import { sendSMS } from "@/lib/twilio";
 import { parseEmrText, type ParsedPatient } from "@/lib/emr-parser";
+import {
+  buildEmrFindingsSummary,
+  mergeCarePlanMarkdown,
+  mergeLabsMarkdown,
+  mergeMedicalHistoryMarkdown,
+  mergeTrendsMarkdown,
+} from "@/lib/patient-markdown";
 
 async function sendSMSWithRetry(phone: string, body: string, attempts = 3): Promise<boolean> {
   let lastError: unknown;
@@ -128,7 +135,13 @@ export async function POST(req: NextRequest) {
 
   // Initialize NanoClaw patient memory (SOUL.md + MEMORY.md)
   try {
-    const { initializePatientMemory, initializePatientMarkdownFiles } = await import('@/lib/patient-memory')
+    const {
+      initializePatientMemory,
+      initializePatientMarkdownFiles,
+      readAllPatientMarkdownFiles,
+      writePatientMarkdownFile,
+      appendMemorySummary,
+    } = await import('@/lib/patient-memory')
     await initializePatientMemory(patient.id, {
       name: parsed.firstName,
       conditions: parsed.conditions,
@@ -139,6 +152,23 @@ export async function POST(req: NextRequest) {
       conditions: parsed.conditions,
       medicalSummary: parsed.medicalSummary,
     })
+
+    // Merge parsed EMR data into the freshly-created template files
+    const current = await readAllPatientMarkdownFiles(patient.id)
+    const mergedLabs = mergeLabsMarkdown(current['Labs.md'], parsed)
+    const mergedHistory = mergeMedicalHistoryMarkdown(current['MedicalHistory.md'], parsed)
+    const mergedTrends = mergeTrendsMarkdown(current['Trends.md'], parsed)
+    const mergedCarePlan = mergeCarePlanMarkdown(current['CarePlan.md'], parsed)
+
+    await Promise.all([
+      writePatientMarkdownFile(patient.id, 'Labs.md', mergedLabs),
+      writePatientMarkdownFile(patient.id, 'MedicalHistory.md', mergedHistory),
+      writePatientMarkdownFile(patient.id, 'Trends.md', mergedTrends),
+      writePatientMarkdownFile(patient.id, 'CarePlan.md', mergedCarePlan),
+    ])
+
+    const summary = buildEmrFindingsSummary(parsed)
+    await appendMemorySummary(patient.id, summary)
   } catch {
     // Non-blocking — memory files are supplementary to DB
   }

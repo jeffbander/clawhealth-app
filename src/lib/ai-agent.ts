@@ -9,7 +9,7 @@ import { decryptPHI, decryptJSON, encryptPHI } from './encryption'
 import { getConditionPrompts, buildConditionPromptSection } from './condition-prompts'
 import { loadConditionTemplates, matchConditions, buildConditionSection } from './condition-prompts-db'
 import { checkInteractions, DrugInteraction } from './med-interactions'
-import { loadMemoryContext, logInteraction, readPatientMarkdownFile } from './patient-memory'
+import { loadMemoryContext, logInteraction, readPatientMarkdownFile, routeInsightToMarkdown, compactSessionIfNeeded, type InsightTarget } from './patient-memory'
 
 const prisma = new PrismaClient()
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -247,14 +247,15 @@ async function extractAndStoreInsights(
   try {
     const completion = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 256,
+      max_tokens: 512,
       system: `You are a clinical data extractor. From the patient message and AI response, extract any clinically relevant insights. Return a JSON object with:
-- "insights": array of short factual statements (e.g. "Patient reports ankle swelling since Tuesday", "Patient confirmed taking Lisinopril daily")  
+- "insights": array of short factual statements (e.g. "Patient reports ankle swelling since Tuesday", "Patient confirmed taking Lisinopril daily")
 - "adherenceUpdate": { "drug": string, "taken": boolean } or null if no medication adherence info
 - "vitalMention": { "type": string, "value": string } or null if no vital signs mentioned
 - "moodOrConcern": string or null (e.g. "anxious about upcoming procedure", "feeling better")
+- "markdownRouting": array of { "fact": string, "target": "MedicalHistory" | "Labs" | "Trends" | "Memory", "category": "allergy" | "condition" | "procedure" | "lab_value" | "vital_trend" | "symptom" | "preference" | "behavioral" } — route patient-reported clinical facts to the correct markdown file. Use "MedicalHistory" for allergies, conditions, and procedures. Use "Labs" for lab values. Use "Trends" for vital trends and symptoms. Use "Memory" for preferences and behavioral observations. Empty array if nothing to route.
 
-If nothing clinically relevant, return {"insights":[],"adherenceUpdate":null,"vitalMention":null,"moodOrConcern":null}
+If nothing clinically relevant, return {"insights":[],"adherenceUpdate":null,"vitalMention":null,"moodOrConcern":null,"markdownRouting":[]}
 Return ONLY valid JSON.`,
       messages: [{
         role: 'user',
@@ -309,6 +310,18 @@ AI response:
         })
       }
     }
+
+    // Route conversation-learned clinical facts to markdown files
+    if (Array.isArray(extracted.markdownRouting)) {
+      for (const entry of extracted.markdownRouting) {
+        if (entry?.fact && entry?.target && entry?.category) {
+          const validTargets: InsightTarget[] = ['MedicalHistory', 'Labs', 'Trends', 'Memory']
+          if (validTargets.includes(entry.target)) {
+            await routeInsightToMarkdown(patientId, entry.fact, entry.target, entry.category)
+          }
+        }
+      }
+    }
   } catch {
     // Insight extraction is best-effort — never block patient responses
   }
@@ -325,7 +338,7 @@ export async function generatePatientResponse(
   patientId: string,
   userMessage: string,
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
-): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string }> {
+): Promise<{ response: string; requiresEscalation: boolean; escalationReason?: string; matchedKeywords?: string[] }> {
   // Parallelize: load patient context + conversation history simultaneously
   const [ctx, history] = await Promise.all([
     loadPatientContext(patientId),
@@ -366,9 +379,10 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
   ]
 
   const messageLC = userMessage.toLowerCase()
-  const requiresEscalation = emergencyKeywords.some(kw => messageLC.includes(kw))
+  const matchedKeywords = emergencyKeywords.filter(kw => messageLC.includes(kw))
+  const requiresEscalation = matchedKeywords.length > 0
   const escalationReason = requiresEscalation
-    ? `Emergency keyword detected in patient message`
+    ? `Emergency keywords detected: ${matchedKeywords.join(', ')}`
     : undefined
 
   const messages = [
@@ -396,5 +410,8 @@ Do NOT ask multiple questions. Keep it conversational and concise.`
   // Fire-and-forget: log to NanoClaw daily memory file
   logInteraction(patientId, userMessage, response).catch(() => {})
 
-  return { response, requiresEscalation, escalationReason }
+  // Fire-and-forget: compact session if 16+ messages today
+  compactSessionIfNeeded(patientId).catch(() => {})
+
+  return { response, requiresEscalation, escalationReason, matchedKeywords: matchedKeywords.length > 0 ? matchedKeywords : undefined }
 }
